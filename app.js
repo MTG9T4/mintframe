@@ -9,7 +9,7 @@ const palettes = {
 const looks = { natural: [100, 100, 100], pop: [105, 120, 145], noir: [105, 125, 0], soft: [108, 86, 88] };
 const defaultFraming = () => Object.fromEntries(Object.keys(sizes).map((output) => [output, { zoom: 1, x: 0, y: 0 }]));
 const outputNames = { icon: 'coin image', banner: 'Pump banner', social: 'X card', story: 'story' };
-const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, framing: defaultFraming(), brightness: 100, contrast: 100, saturation: 100, look: 'natural', flipArt: false, cleanIcon: false, shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
+const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, framing: defaultFraming(), brightness: 100, contrast: 100, saturation: 100, look: 'natural', flipArt: false, iconLabel: false, shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
 
 function form() {
   return {
@@ -20,7 +20,7 @@ function form() {
 }
 function save() {
   if (state.shareMode) return;
-  try { localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...form(), theme: state.theme, framing: state.framing, brightness: state.brightness, contrast: state.contrast, saturation: state.saturation, look: state.look, flipArt: state.flipArt, cleanIcon: state.cleanIcon })); }
+  try { localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...form(), theme: state.theme, framing: state.framing, brightness: state.brightness, contrast: state.contrast, saturation: state.saturation, look: state.look, flipArt: state.flipArt, iconLabel: state.iconLabel })); }
   catch { /* Draft saving is optional in restricted browser modes. */ }
 }
 function restore() {
@@ -41,7 +41,7 @@ function restore() {
     state.contrast = Number.isFinite(draft.contrast) ? Math.min(150, Math.max(50, draft.contrast)) : 100;
     state.saturation = Number.isFinite(draft.saturation) ? Math.min(200, Math.max(0, draft.saturation)) : 100;
     state.look = Object.hasOwn(looks, draft.look) || draft.look === 'custom' ? draft.look : 'natural';
-    state.flipArt = draft.flipArt === true; state.cleanIcon = draft.cleanIcon === true;
+    state.flipArt = draft.flipArt === true; state.iconLabel = draft.iconLabel === true;
     syncFramingControls();
     syncArtControls();
     if (palettes[draft.theme]) setTheme(draft.theme, false);
@@ -57,7 +57,7 @@ function syncArtControls() {
   for (const key of ['brightness', 'contrast', 'saturation']) {
     $(`art-${key}`).value = state[key]; $(`${key}-value`).textContent = `${state[key]}%`;
   }
-  $('flip-art').checked = state.flipArt; $('clean-icon').checked = state.cleanIcon;
+  $('flip-art').checked = state.flipArt; $('icon-label').checked = state.iconLabel;
   document.querySelectorAll('.look').forEach((button) => {
     const active = button.dataset.look === state.look;
     button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
@@ -120,7 +120,7 @@ function updateChecks() {
     ['Website link', d.website ? validUrl(d.website) : null, 'Optional. If added, use a complete http:// or https:// link.', false],
     ['X profile', d.social ? validUrl(d.social, true) : null, 'Optional. If added, use a complete x.com profile link.', false],
     ['Telegram', d.telegram ? validTelegram(d.telegram) : null, 'Optional. If added, use a complete t.me link.', false],
-    ['Launch assets', !!d.name && !!d.ticker && !!d.tagline, 'Your name, ticker and one-line idea populate every export.', true]
+    ['Launch assets', !!d.name && !!d.ticker && !!d.tagline, 'The coin image stays clean; your name and idea appear on the banner and social assets.', true]
   ];
   const core = checks.filter((check) => check[3]);
   const score = core.filter((check) => check[1]).length;
@@ -198,24 +198,20 @@ function drawAsset(canvas, output) {
   const [w, h] = sizes[output], d = form(), p = palettes[state.theme]; canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d'); backdrop(ctx, w, h, p);
   const name = (d.name || 'YOUR IDEA').toUpperCase(), ticker = (d.ticker || 'TICKER').toUpperCase(), tagline = (d.tagline || 'MAKE IT LAND.').toUpperCase();
-  if (output === 'icon' && state.art && state.cleanIcon) { drawImageCover(ctx, state.art, 0, 0, w, h, output); return; }
   if (output === 'icon') {
     if (state.art) {
       drawImageCover(ctx, state.art, 0, 0, w, h, output);
-      const shade = ctx.createLinearGradient(0, 300, 0, h); shade.addColorStop(0, '#07100e00'); shade.addColorStop(.62, '#07100e87'); shade.addColorStop(1, '#07100ef5'); ctx.fillStyle = shade; ctx.fillRect(0, 0, w, h);
-    } else { ctx.save(); ctx.shadowColor = p.accent; ctx.shadowBlur = 110; star(ctx, 780, 405, 270, p.accent); ctx.restore(); star(ctx, 780, 405, 270, p.accent); }
-    frame(ctx, w, h, p, 36); label(ctx, 'MF / LAUNCH STUDIO', 75, 100, p.pale, 23);
-    label(ctx, `01 / ${ticker}`, 75, 805, p.accent, 24); fitText(ctx, name, 1060, 140, 700, 44);
-    ctx.fillStyle = p.pale; ctx.fillText(name, 70, 945, 1060);
-    ctx.font = '500 30px "DM Mono", monospace'; ctx.fillStyle = p.pale; ctx.fillText(tagline.slice(0, 48), 75, 1015);
-    ctx.fillStyle = p.accent; ctx.fillRect(75, 1062, 1050, 2); label(ctx, 'A NEW SIGNAL STARTS HERE', 75, 1115, p.pale, 20);
+    } else { ctx.save(); ctx.shadowColor = p.accent; ctx.shadowBlur = 110; star(ctx, 600, 600, 360, p.accent); ctx.restore(); star(ctx, 600, 600, 360, p.accent); }
+    if (state.iconLabel && d.name) {
+      const shade = ctx.createLinearGradient(0, 780, 0, h); shade.addColorStop(0, '#07100e00'); shade.addColorStop(1, '#07100eea'); ctx.fillStyle = shade; ctx.fillRect(0, 780, w, 420);
+      fitText(ctx, name, 1080, 102, 700, 44); ctx.fillStyle = p.pale; ctx.textAlign = 'center'; ctx.fillText(name, 600, 1100, 1080); ctx.textAlign = 'start';
+    }
   } else if (output === 'banner') {
     if (state.art) { drawImageCover(ctx, state.art, 830, 0, 670, h, output); ctx.fillStyle = p.base + '44'; ctx.fillRect(830, 0, 670, h); }
     else { star(ctx, 1170, 245, 200, p.accent); }
     frame(ctx, w, h, p, 19); label(ctx, `NEW / ${ticker}`, 56, 70, p.accent, 20);
     fitText(ctx, name, 820, 100, 700, 39); ctx.fillStyle = p.pale; ctx.fillText(name, 52, 280, 820);
     ctx.fillStyle = p.accent; ctx.fillRect(56, 322, 100, 4); label(ctx, tagline.slice(0, 48), 56, 382, p.pale, 21);
-    label(ctx, 'MINTFRAME / MADE TO LAUNCH', 56, 452, p.dim, 16);
   } else if (output === 'social') {
     if (state.art) { drawImageCover(ctx, state.art, 720, 0, 480, h, output); ctx.fillStyle = p.base + '55'; ctx.fillRect(720, 0, 480, h); }
     else star(ctx, 950, 315, 182, p.accent);
@@ -223,7 +219,6 @@ function drawAsset(canvas, output) {
     ctx.font = '700 104px "Space Grotesk", Arial, sans-serif'; const lines = wrapText(ctx, name, 650, 3); fitText(ctx, lines[0] || name, 650, 104, 700, 42);
     ctx.fillStyle = p.pale; lines.forEach((line, i) => ctx.fillText(line, 56, 290 + i * 105, 650));
     ctx.fillStyle = p.accent; ctx.fillRect(61, 510, 72, 4); label(ctx, tagline.slice(0, 40), 61, 570, p.pale, 19);
-    label(ctx, 'A NEW IDEA, READY FOR THE WORLD.', 61, 628, p.dim, 16);
   } else {
     if (state.art) { drawImageCover(ctx, state.art, 0, 210, w, 1050, output); ctx.fillStyle = p.base + '33'; ctx.fillRect(0, 210, w, 1050); }
     else { star(ctx, 540, 760, 355, p.accent); }
@@ -231,7 +226,7 @@ function drawAsset(canvas, output) {
     ctx.fillStyle = p.base + 'dd'; ctx.fillRect(45, 1280, 990, 460);
     ctx.font = '700 125px "Space Grotesk", Arial, sans-serif'; const lines = wrapText(ctx, name, 870, 3); fitText(ctx, lines[0] || name, 870, 125, 700, 46);
     ctx.fillStyle = p.pale; lines.forEach((line, i) => ctx.fillText(line, 85, 1420 + i * 132, 870));
-    label(ctx, tagline.slice(0, 38), 87, 1640, p.accent, 25); label(ctx, 'YOUR IDEA. OUT IN THE OPEN.', 87, 1813, p.dim, 22);
+    label(ctx, tagline.slice(0, 38), 87, 1640, p.accent, 25);
   }
 }
 function drawMint() {
@@ -271,7 +266,7 @@ function renderPreview() {
   }, 300);
 }
 function render() {
-  renderPreview(); drawMint(); updateChecks();
+  renderPreview(); drawMint(); updateChecks(); updatePumpHandoff();
   $('preview').parentElement.classList.toggle('has-art', !!state.art);
 }
 function selectOutput(output) {
@@ -297,6 +292,25 @@ function download(blob, name) { const url = URL.createObjectURL(blob), a = docum
 const slug = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 38) || 'my-coin';
 function assetName(output) { return `mintframe-${slug(form().name)}-${output}.${output === 'banner' ? 'jpg' : 'png'}`; }
 async function downloadCurrent() { try { download(await assetBlob($('preview'), state.output), assetName(state.output)); toast('Asset downloaded'); } catch { toast('Export failed. Please try again.'); } }
+async function downloadPumpAsset(output) {
+  try {
+    const canvas = document.createElement('canvas'); drawAsset(canvas, output);
+    download(await assetBlob(canvas, output), assetName(output)); toast(`${output === 'icon' ? 'Coin image' : 'Pump banner'} saved`);
+  } catch { toast('Export failed. Please try another image.'); }
+}
+function pumpDescription(d) {
+  const idea = d.tagline.trim(), description = d.description.trim();
+  return idea && description && !description.toLowerCase().includes(idea.toLowerCase()) ? `${idea}\n\n${description}` : description || idea;
+}
+function pumpFields(d) { return { name: d.name, ticker: d.ticker, description: pumpDescription(d), website: d.website, social: d.social, telegram: d.telegram }; }
+function updatePumpHandoff() {
+  const values = pumpFields(form());
+  document.querySelectorAll('[data-pump-field]').forEach((row) => {
+    const value = values[row.dataset.pumpField];
+    row.hidden = !value;
+    row.querySelector('strong').textContent = value;
+  });
+}
 
 // A small ZIP writer uses the uncompressed ZIP format. PNGs and JPEGs are already compressed.
 const crcTable = new Uint32Array(256);
@@ -328,7 +342,7 @@ async function downloadKit() {
     }
     const mint = mintFromInput(d.mint);
     if (mint) files.push({ name: 'exact-mint-card.png', data: new Uint8Array(await (await canvasBlob($('mint-preview'))).arrayBuffer()) });
-    const copy = `PROJECT: ${d.name}\nTICKER: $${d.ticker}\n\nDESCRIPTION\n${d.description}\n\nX POST DRAFT\n${launchPost(d)}\n${d.website ? `\nWebsite: ${d.website}` : ''}${d.social ? `\nX: ${d.social}` : ''}${d.telegram ? `\nTelegram: ${d.telegram}` : ''}\n${mint ? `\nShareable MintFrame link: ${shareUrl(mint)}` : ''}\n\nFINAL CHECKLIST\n[ ] Confirm all metadata on Pump's create form\n[ ] Confirm image and banner crop; banner is under 5 MB\n[ ] Confirm website, X, and Telegram links\n[ ] Create token and copy the full mint from Pump\n[ ] Verify the exact mint on Pump before posting\n\nImages and text made with MintFrame. No account or wallet required.\n`;
+    const copy = `PROJECT: ${d.name}\nTICKER: $${d.ticker}\n\nDESCRIPTION FOR PUMP\n${pumpDescription(d)}\n\nX POST DRAFT\n${launchPost(d)}\n${d.website ? `\nWebsite: ${d.website}` : ''}${d.social ? `\nX: ${d.social}` : ''}${d.telegram ? `\nTelegram: ${d.telegram}` : ''}\n${mint ? `\nShareable MintFrame link: ${shareUrl(mint)}` : ''}\n\nFINAL CHECKLIST\n[ ] Confirm all metadata on Pump's create form\n[ ] Confirm image and banner crop; banner is under 5 MB\n[ ] Confirm website, X, and Telegram links\n[ ] Create token and copy the full mint from Pump\n[ ] Verify the exact mint on Pump before posting\n\nImages and text made with MintFrame. No account or wallet required.\n`;
     files.push({ name: 'launch-copy-and-checklist.txt', data: new TextEncoder().encode(copy) });
     download(zip(files), `mintframe-${slug(d.name)}-launch-kit.zip`); toast('Your launch kit is ready');
   } catch (error) { console.error(error); toast('Kit export failed. Please try again.'); }
@@ -462,7 +476,7 @@ for (const key of ['brightness', 'contrast', 'saturation']) {
   });
 }
 $('flip-art').addEventListener('change', (event) => { state.flipArt = event.target.checked; renderPreview(); save(); });
-$('clean-icon').addEventListener('change', (event) => { state.cleanIcon = event.target.checked; renderPreview(); save(); });
+$('icon-label').addEventListener('change', (event) => { state.iconLabel = event.target.checked; renderPreview(); save(); });
 $('reset-look').addEventListener('click', () => setLook('natural'));
 document.querySelectorAll('.preview-tabs button').forEach((button) => button.addEventListener('click', () => selectOutput(button.dataset.output)));
 $('upload-button').addEventListener('click', () => $('art-upload').click());
@@ -519,6 +533,19 @@ previewCanvas.addEventListener('keydown', (event) => {
 });
 $('download-current').addEventListener('click', downloadCurrent);
 $('download-kit').addEventListener('click', downloadKit);
+$('prepare-pump').addEventListener('click', () => {
+  const d = form();
+  if (!d.name || !d.ticker) { toast('Add a coin name and ticker first.'); (!d.name ? $('coin-name') : $('ticker')).focus(); return; }
+  const details = $('pump-handoff-details'), open = details.hidden;
+  details.hidden = !open; $('prepare-pump').setAttribute('aria-expanded', String(open));
+  if (open) { updatePumpHandoff(); details.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); }
+});
+$('save-pump-image').addEventListener('click', () => downloadPumpAsset('icon'));
+$('save-pump-banner').addEventListener('click', () => downloadPumpAsset('banner'));
+document.querySelectorAll('[data-pump-field]').forEach((row) => row.querySelector('button').addEventListener('click', () => {
+  const value = pumpFields(form())[row.dataset.pumpField];
+  if (value) copyText(value, `${row.querySelector('span').textContent} copied`);
+}));
 $('copy-post').addEventListener('click', async () => { const d = form(); if (!d.name || !d.ticker) { toast('Add a project name and ticker first.'); return; } await copyText(launchPost(d), 'Post draft copied'); });
 $('copy-address').addEventListener('click', async () => { const mint = mintFromInput(form().mint); if (mint) await copyText(mint, 'Full mint address copied'); });
 $('download-mint').addEventListener('click', async () => { if (!mintFromInput(form().mint)) return; try { download(await canvasBlob($('mint-preview')), `mintframe-${slug(form().name)}-exact-mint.png`); toast('Address card downloaded'); } catch { toast('Export failed. Please try again.'); } });
