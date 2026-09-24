@@ -536,6 +536,8 @@ function drawMobilePreview(source) {
   ctx.clearRect(0, 0, thumb.width, thumb.height);
   ctx.drawImage(source, 0, 0, thumb.width, thumb.height);
   $('mobile-preview-name').textContent = $('coin-name').value.trim() || 'Your coin';
+  $('mobile-preview-ticker').textContent = $('ticker').value.trim() ? `$${$('ticker').value.trim()}` : 'ADD TICKER';
+  $('mobile-preview-idea').textContent = $('tagline').value.trim() || 'Your one-line idea appears here.';
 }
 $('toggle-links').addEventListener('click', () => {
   const open = $('toggle-links').getAttribute('aria-expanded') !== 'true';

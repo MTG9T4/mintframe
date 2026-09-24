@@ -13,20 +13,20 @@
   <meta name="twitter:image" content="https://mtg9t4.github.io/mintframe/og.png">
   <title>MintFrame — launch studio for Pump creators</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=mobile-inline-1">
+  <link rel="stylesheet" href="styles.css?v=mobile-preview-3">
 </head>
 <body>
   <div class="ambient ambient-one" aria-hidden="true"></div><div class="ambient ambient-two" aria-hidden="true"></div>
   <header class="site-header">
     <a class="brand" href="#top" aria-label="MintFrame home"><span class="brand-mark">M<span>✳</span></span><span>mintframe<span class="brand-dot">.</span></span></a>
     <nav aria-label="Main navigation"><a href="#studio">Studio</a><a href="#preflight">Preflight</a><a href="#identity">Mint link</a></nav>
-    <a class="header-action" href="#studio">Open the studio <span aria-hidden="true">↗</span></a>
+    <a class="header-action" href="#editor">Open the studio <span aria-hidden="true">↗</span></a>
   </header>
   <main id="top">
     <section class="hero wrap">
       <div class="eyebrow"><span class="pulse"></span> THE CREATOR'S LAUNCH DESK <span class="eyebrow-line"></span> FREE · NO WALLET</div>
       <h1>Make the launch<br><em>look ready.</em></h1>
-      <div class="hero-lower"><p>One place to shape your coin's look, catch launch mistakes, and give your community the <strong>right mint address</strong> to share.</p><a class="hero-cta" href="#studio">Build a launch kit <span>↗</span></a><p class="hero-cta-note">PFP, BANNER &amp; MORE IN ONE CLICK.</p></div>
+      <div class="hero-lower"><p>One place to shape your coin's look, catch launch mistakes, and give your community the <strong>right mint address</strong> to share.</p><a class="hero-cta" href="#editor">Build a launch kit <span>↗</span></a><p class="hero-cta-note">PFP, BANNER &amp; MORE IN ONE CLICK.</p></div>
       <div class="hero-art"><div class="hero-depth depth-back" aria-hidden="true"></div><div class="hero-depth depth-front" aria-hidden="true"></div><div class="hero-art-card back" aria-hidden="true"><span>1500 × 500</span><b>THE BANNER</b></div><div class="hero-art-card front" aria-hidden="true"><div class="hero-symbol">✳</div><span>YOUR IDEA. IN FRAME.</span><b>MAKE IT<br>LAND.</b><i>01 / 03</i></div><div class="orb orb-a" aria-hidden="true"></div><div class="orb orb-b" aria-hidden="true"></div><button id="hero-shuffle" class="hero-shuffle" type="button" aria-label="Shuffle the launch cards" aria-pressed="false"></button><span class="hero-art-hint" aria-hidden="true">TAP TO SHUFFLE ↗</span></div>
     </section>
     <div class="ticker-strip" aria-hidden="true"><span>CONCEPT → CREATIVE → CHECK → LAUNCH → SHARE</span><span>✳</span><span>CONCEPT → CREATIVE → CHECK → LAUNCH → SHARE</span><span>✳</span></div>
@@ -34,9 +34,9 @@
       <div class="section-kicker">01 / THE STUDIO</div>
       <div class="section-heading"><h2>Build it once.<br><em>Share it everywhere.</em></h2><p>Everything updates as you type. Artwork stays in your browser. Download assets sized for Pump and social posts.</p></div>
       <div class="workspace">
-        <div class="controls panel">
+        <div class="controls panel" id="editor">
           <div class="panel-head"><span>YOUR PROJECT</span><span class="step-count">01 — 04</span></div>
-          <div class="mobile-inline-preview"><canvas id="mobile-preview-thumb" width="240" height="240" aria-label="Live coin image preview"></canvas><div class="mobile-inline-preview-copy"><span>LIVE COIN IMAGE</span><strong id="mobile-preview-name">Your coin</strong><small>Updates as you type</small><button id="mobile-preview-jump" type="button">See all assets ↗</button></div></div>
+          <div class="mobile-inline-preview"><canvas id="mobile-preview-thumb" width="300" height="300" aria-label="Live coin image preview"></canvas><div class="mobile-inline-preview-copy"><span>LIVE COIN IMAGE</span><strong id="mobile-preview-name">Your coin</strong><b id="mobile-preview-ticker">ADD TICKER</b><p id="mobile-preview-idea">Your one-line idea appears here.</p><button id="mobile-preview-jump" type="button">See all assets ↗</button></div></div>
           <div class="field-row"><label>Coin name<input id="coin-name" maxlength="32" autocomplete="off" placeholder="e.g. Good Signal"></label><label>Ticker<input id="ticker" maxlength="12" autocomplete="off" placeholder="e.g. SIGNAL"></label></div>
           <label>One-line idea<input id="tagline" maxlength="90" autocomplete="off" placeholder="What makes it memorable?"></label>
           <label>Description <span class="label-note">For your launch copy</span><textarea id="description" rows="3" maxlength="500" placeholder="What is this project for?"></textarea></label>
@@ -75,10 +75,10 @@
       <div class="collision-panel panel"><div><span class="section-kicker">NAME COLLISION SCAN / OPTIONAL</span><h3>Same name? Show the address.</h3><p>Look for indexed Solana tokens with your name or ticker. This is a limited search, not a complete list or proof that any token is an imitation.</p></div><button id="scan-names" class="button-outline" type="button">Search possible matches ↗</button><div id="collision-results" class="collision-results" aria-live="polite"></div><small>Search sends your project name to <a href="https://docs.dexscreener.com/api/reference" target="_blank" rel="noopener noreferrer">DEX Screener</a>. New tokens may not appear immediately.</small></div>
       <div class="identity-footnote"><span>◉ EXACT ADDRESS</span><span>◉ NO SIGN-IN</span><span>◉ NO CLAIM OF OWNERSHIP</span></div>
     </section>
-    <section class="closing wrap"><span>GOT AN IDEA?</span><h2>Give it a frame.<br><em>Then give it to the world.</em></h2><a href="#studio" class="hero-cta">Back to the studio ↗</a></section>
+    <section class="closing wrap"><span>GOT AN IDEA?</span><h2>Give it a frame.<br><em>Then give it to the world.</em></h2><a href="#editor" class="hero-cta">Back to the studio ↗</a></section>
   </main>
   <footer class="site-footer wrap"><a class="brand" href="#top"><span class="brand-mark">M<span>✳</span></span><span>mintframe<span class="brand-dot">.</span></span></a><p>Independent creator tool. Not affiliated with Pump.fun. No token sale or financial advice.</p><a href="https://pump.fun/create" target="_blank" rel="noopener noreferrer">Official Pump create ↗</a></footer>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=mobile-inline-1" defer></script>
+  <script src="app.js?v=mobile-preview-3" defer></script>
 </body>
 </html>
