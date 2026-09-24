@@ -7,7 +7,9 @@ const palettes = {
   chrome: { base: '#101921', mid: '#315066', glow: '#678da8', accent: '#b8deef', pale: '#eefaff', dim: '#a0baca' }
 };
 const looks = { natural: [100, 100, 100], pop: [105, 120, 145], noir: [105, 125, 0], soft: [108, 86, 88] };
-const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, artZoom: 1, artX: 0, artY: 0, brightness: 100, contrast: 100, saturation: 100, look: 'natural', flipArt: false, cleanIcon: false, shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
+const defaultFraming = () => Object.fromEntries(Object.keys(sizes).map((output) => [output, { zoom: 1, x: 0, y: 0 }]));
+const outputNames = { icon: 'coin image', banner: 'Pump banner', social: 'X card', story: 'story' };
+const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, framing: defaultFraming(), brightness: 100, contrast: 100, saturation: 100, look: 'natural', flipArt: false, cleanIcon: false, shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
 
 function form() {
   return {
@@ -18,7 +20,7 @@ function form() {
 }
 function save() {
   if (state.shareMode) return;
-  try { localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...form(), theme: state.theme, artZoom: state.artZoom, artX: state.artX, artY: state.artY, brightness: state.brightness, contrast: state.contrast, saturation: state.saturation, look: state.look, flipArt: state.flipArt, cleanIcon: state.cleanIcon })); }
+  try { localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...form(), theme: state.theme, framing: state.framing, brightness: state.brightness, contrast: state.contrast, saturation: state.saturation, look: state.look, flipArt: state.flipArt, cleanIcon: state.cleanIcon })); }
   catch { /* Draft saving is optional in restricted browser modes. */ }
 }
 function restore() {
@@ -26,18 +28,30 @@ function restore() {
     const draft = JSON.parse(localStorage.getItem('mintframe-draft-v1') || '{}');
     const mapping = { name: 'coin-name', ticker: 'ticker', tagline: 'tagline', description: 'description', website: 'website', social: 'social', telegram: 'telegram', mint: 'mint-address' };
     Object.entries(mapping).forEach(([key, id]) => { if (typeof draft[key] === 'string') $(id).value = draft[key]; });
-    state.artZoom = Number.isFinite(draft.artZoom) ? Math.min(2.2, Math.max(1, draft.artZoom)) : 1;
-    state.artX = Number.isFinite(draft.artX) ? Math.min(1, Math.max(-1, draft.artX)) : 0;
-    state.artY = Number.isFinite(draft.artY) ? Math.min(1, Math.max(-1, draft.artY)) : 0;
+    const legacy = { zoom: draft.artZoom, x: draft.artX, y: draft.artY };
+    for (const output of Object.keys(sizes)) {
+      const frame = draft.framing?.[output] || legacy;
+      state.framing[output] = {
+        zoom: Number.isFinite(frame.zoom) ? Math.min(2.2, Math.max(1, frame.zoom)) : 1,
+        x: Number.isFinite(frame.x) ? Math.min(1, Math.max(-1, frame.x)) : 0,
+        y: Number.isFinite(frame.y) ? Math.min(1, Math.max(-1, frame.y)) : 0
+      };
+    }
     state.brightness = Number.isFinite(draft.brightness) ? Math.min(150, Math.max(50, draft.brightness)) : 100;
     state.contrast = Number.isFinite(draft.contrast) ? Math.min(150, Math.max(50, draft.contrast)) : 100;
     state.saturation = Number.isFinite(draft.saturation) ? Math.min(200, Math.max(0, draft.saturation)) : 100;
     state.look = Object.hasOwn(looks, draft.look) || draft.look === 'custom' ? draft.look : 'natural';
     state.flipArt = draft.flipArt === true; state.cleanIcon = draft.cleanIcon === true;
-    $('art-zoom').value = Math.round(state.artZoom * 100); $('zoom-value').textContent = `${Math.round(state.artZoom * 100)}%`;
+    syncFramingControls();
     syncArtControls();
     if (palettes[draft.theme]) setTheme(draft.theme, false);
   } catch { /* A corrupted local draft should not prevent the studio from opening. */ }
+}
+function syncFramingControls() {
+  const frame = state.framing[state.output];
+  $('art-zoom').value = Math.round(frame.zoom * 100);
+  $('zoom-value').textContent = `${Math.round(frame.zoom * 100)}%`;
+  $('framing-output').textContent = outputNames[state.output];
 }
 function syncArtControls() {
   for (const key of ['brightness', 'contrast', 'saturation']) {
@@ -162,10 +176,11 @@ function wrapText(ctx, text, maxWidth, maxLines = 3) {
   }
   return lines;
 }
-function drawImageCover(ctx, image, x, y, w, h, radius = 0) {
-  const ratio = Math.max(w / image.width, h / image.height) * state.artZoom, iw = image.width * ratio, ih = image.height * ratio;
-  const dx = x + (w - iw) / 2 + state.artX * Math.max(0, (iw - w) / 2);
-  const dy = y + (h - ih) / 2 + state.artY * Math.max(0, (ih - h) / 2);
+function drawImageCover(ctx, image, x, y, w, h, output, radius = 0) {
+  const framing = state.framing[output];
+  const ratio = Math.max(w / image.width, h / image.height) * framing.zoom, iw = image.width * ratio, ih = image.height * ratio;
+  const dx = x + (w - iw) / 2 + framing.x * Math.max(0, (iw - w) / 2);
+  const dy = y + (h - ih) / 2 + framing.y * Math.max(0, (ih - h) / 2);
   ctx.save(); if (radius) { ctx.beginPath(); ctx.roundRect(x, y, w, h, radius); ctx.clip(); }
   else { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); }
   ctx.filter = `brightness(${state.brightness}%) contrast(${state.contrast}%) saturate(${state.saturation}%)`;
@@ -183,10 +198,10 @@ function drawAsset(canvas, output) {
   const [w, h] = sizes[output], d = form(), p = palettes[state.theme]; canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d'); backdrop(ctx, w, h, p);
   const name = (d.name || 'YOUR IDEA').toUpperCase(), ticker = (d.ticker || 'TICKER').toUpperCase(), tagline = (d.tagline || 'MAKE IT LAND.').toUpperCase();
-  if (output === 'icon' && state.art && state.cleanIcon) { drawImageCover(ctx, state.art, 0, 0, w, h); return; }
+  if (output === 'icon' && state.art && state.cleanIcon) { drawImageCover(ctx, state.art, 0, 0, w, h, output); return; }
   if (output === 'icon') {
     if (state.art) {
-      drawImageCover(ctx, state.art, 0, 0, w, h);
+      drawImageCover(ctx, state.art, 0, 0, w, h, output);
       const shade = ctx.createLinearGradient(0, 300, 0, h); shade.addColorStop(0, '#07100e00'); shade.addColorStop(.62, '#07100e87'); shade.addColorStop(1, '#07100ef5'); ctx.fillStyle = shade; ctx.fillRect(0, 0, w, h);
     } else { ctx.save(); ctx.shadowColor = p.accent; ctx.shadowBlur = 110; star(ctx, 780, 405, 270, p.accent); ctx.restore(); star(ctx, 780, 405, 270, p.accent); }
     frame(ctx, w, h, p, 36); label(ctx, 'MF / LAUNCH STUDIO', 75, 100, p.pale, 23);
@@ -195,14 +210,14 @@ function drawAsset(canvas, output) {
     ctx.font = '500 30px "DM Mono", monospace'; ctx.fillStyle = p.pale; ctx.fillText(tagline.slice(0, 48), 75, 1015);
     ctx.fillStyle = p.accent; ctx.fillRect(75, 1062, 1050, 2); label(ctx, 'A NEW SIGNAL STARTS HERE', 75, 1115, p.pale, 20);
   } else if (output === 'banner') {
-    if (state.art) { drawImageCover(ctx, state.art, 830, 0, 670, h); ctx.fillStyle = p.base + '44'; ctx.fillRect(830, 0, 670, h); }
+    if (state.art) { drawImageCover(ctx, state.art, 830, 0, 670, h, output); ctx.fillStyle = p.base + '44'; ctx.fillRect(830, 0, 670, h); }
     else { star(ctx, 1170, 245, 200, p.accent); }
     frame(ctx, w, h, p, 19); label(ctx, `NEW / ${ticker}`, 56, 70, p.accent, 20);
     fitText(ctx, name, 820, 100, 700, 39); ctx.fillStyle = p.pale; ctx.fillText(name, 52, 280, 820);
     ctx.fillStyle = p.accent; ctx.fillRect(56, 322, 100, 4); label(ctx, tagline.slice(0, 48), 56, 382, p.pale, 21);
     label(ctx, 'MINTFRAME / MADE TO LAUNCH', 56, 452, p.dim, 16);
   } else if (output === 'social') {
-    if (state.art) { drawImageCover(ctx, state.art, 720, 0, 480, h); ctx.fillStyle = p.base + '55'; ctx.fillRect(720, 0, 480, h); }
+    if (state.art) { drawImageCover(ctx, state.art, 720, 0, 480, h, output); ctx.fillStyle = p.base + '55'; ctx.fillRect(720, 0, 480, h); }
     else star(ctx, 950, 315, 182, p.accent);
     frame(ctx, w, h, p, 28); label(ctx, `INTRODUCING / $${ticker}`, 62, 95, p.accent, 21);
     ctx.font = '700 104px "Space Grotesk", Arial, sans-serif'; const lines = wrapText(ctx, name, 650, 3); fitText(ctx, lines[0] || name, 650, 104, 700, 42);
@@ -210,7 +225,7 @@ function drawAsset(canvas, output) {
     ctx.fillStyle = p.accent; ctx.fillRect(61, 510, 72, 4); label(ctx, tagline.slice(0, 40), 61, 570, p.pale, 19);
     label(ctx, 'A NEW IDEA, READY FOR THE WORLD.', 61, 628, p.dim, 16);
   } else {
-    if (state.art) { drawImageCover(ctx, state.art, 0, 210, w, 1050); ctx.fillStyle = p.base + '33'; ctx.fillRect(0, 210, w, 1050); }
+    if (state.art) { drawImageCover(ctx, state.art, 0, 210, w, 1050, output); ctx.fillStyle = p.base + '33'; ctx.fillRect(0, 210, w, 1050); }
     else { star(ctx, 540, 760, 355, p.accent); }
     frame(ctx, w, h, p, 38); label(ctx, `THE LAUNCH / $${ticker}`, 85, 132, p.accent, 24);
     ctx.fillStyle = p.base + 'dd'; ctx.fillRect(45, 1280, 990, 460);
@@ -235,7 +250,7 @@ function drawMint() {
 const outputDescriptions = {
   icon: 'Square PNG · Pump image max 15 MB',
   banner: '1500 × 500 JPG · Pump banner max 5 MB',
-  social: 'Landscape PNG · made for a social post',
+  social: 'Landscape PNG · made for an X card',
   story: 'Vertical PNG · made for a story'
 };
 const avatarSourceCanvas = document.createElement('canvas');
@@ -264,6 +279,7 @@ function selectOutput(output) {
     const active = button.dataset.output === output; button.classList.toggle('active', active); button.setAttribute('aria-selected', String(active));
   });
   $('preview-size').textContent = `${sizes[output][0]} × ${sizes[output][1]} PX`;
+  syncFramingControls();
   render();
 }
 function canvasBlob(canvas, type = 'image/png', quality) { return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Could not create image')), type, quality)); }
@@ -323,7 +339,7 @@ function loadArt(file) {
   const url = URL.createObjectURL(file), image = new Image();
   image.onload = () => {
     state.art = image; state.artInfo = { width: image.width, height: image.height, size: file.size };
-    state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-zoom').value = 100; $('zoom-value').textContent = '100%';
+    state.framing = defaultFraming(); syncFramingControls();
     $('upload-title').textContent = file.name || 'Pasted image'; $('upload-subtitle').textContent = `${image.width} × ${image.height} · ${Math.round(file.size / 1024)} KB`;
     $('remove-art').hidden = false; $('art-framing').hidden = false; $('art-style').hidden = false; render(); URL.revokeObjectURL(url);
     if (Math.min(image.width, image.height) < 1000) toast('Art loaded. A source at least 1000px on its short side will look sharper.');
@@ -446,7 +462,7 @@ for (const key of ['brightness', 'contrast', 'saturation']) {
 }
 $('flip-art').addEventListener('change', (event) => { state.flipArt = event.target.checked; renderPreview(); save(); });
 $('clean-icon').addEventListener('change', (event) => { state.cleanIcon = event.target.checked; renderPreview(); save(); });
-$('reset-look').addEventListener('click', () => { state.flipArt = false; state.cleanIcon = false; setLook('natural'); });
+$('reset-look').addEventListener('click', () => setLook('natural'));
 document.querySelectorAll('.preview-tabs button').forEach((button) => button.addEventListener('click', () => selectOutput(button.dataset.output)));
 $('upload-button').addEventListener('click', () => $('art-upload').click());
 $('art-upload').addEventListener('change', (event) => { loadArt(event.target.files[0]); event.target.value = ''; });
@@ -468,22 +484,24 @@ document.addEventListener('paste', (event) => {
   if (!image) return;
   event.preventDefault(); loadArt(image);
 });
-$('remove-art').addEventListener('click', () => { state.art = null; state.artInfo = null; state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-upload').value = ''; $('upload-title').textContent = 'Add your artwork'; $('upload-subtitle').textContent = 'PNG, JPG or WebP · kept on this device'; $('remove-art').hidden = true; $('art-framing').hidden = true; $('art-style').hidden = true; render(); save(); });
-$('art-zoom').addEventListener('input', (event) => { state.artZoom = Number(event.target.value) / 100; $('zoom-value').textContent = `${event.target.value}%`; renderPreview(); save(); });
-$('reset-framing').addEventListener('click', () => { state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-zoom').value = 100; $('zoom-value').textContent = '100%'; renderPreview(); save(); });
+$('remove-art').addEventListener('click', () => { state.art = null; state.artInfo = null; state.framing = defaultFraming(); syncFramingControls(); $('art-upload').value = ''; $('upload-title').textContent = 'Add your artwork'; $('upload-subtitle').textContent = 'PNG, JPG or WebP · kept on this device'; $('remove-art').hidden = true; $('art-framing').hidden = true; $('art-style').hidden = true; render(); save(); });
+$('art-zoom').addEventListener('input', (event) => { state.framing[state.output].zoom = Number(event.target.value) / 100; $('zoom-value').textContent = `${event.target.value}%`; renderPreview(); save(); });
+$('reset-framing').addEventListener('click', () => { state.framing[state.output] = { zoom: 1, x: 0, y: 0 }; syncFramingControls(); renderPreview(); save(); });
 const previewCanvas = $('preview'); let drag = null;
 previewCanvas.addEventListener('pointerdown', (event) => {
   if (!state.art) return;
-  drag = { x: event.clientX, y: event.clientY, artX: state.artX, artY: state.artY };
+  const frame = state.framing[state.output];
+  drag = { x: event.clientX, y: event.clientY, frameX: frame.x, frameY: frame.y, output: state.output };
   previewCanvas.setPointerCapture(event.pointerId); previewCanvas.classList.add('dragging');
 });
 previewCanvas.addEventListener('pointermove', (event) => {
   if (!drag) return;
   const rect = previewCanvas.getBoundingClientRect();
-  const horizontal = { icon: 1, banner: 670 / 1500, social: 480 / 1200, story: 1 }[state.output];
-  const vertical = state.output === 'story' ? 1050 / 1920 : 1;
-  state.artX = Math.max(-1, Math.min(1, drag.artX + 2 * (event.clientX - drag.x) / (rect.width * horizontal)));
-  state.artY = Math.max(-1, Math.min(1, drag.artY + 2 * (event.clientY - drag.y) / (rect.height * vertical)));
+  const horizontal = { icon: 1, banner: 670 / 1500, social: 480 / 1200, story: 1 }[drag.output];
+  const vertical = drag.output === 'story' ? 1050 / 1920 : 1;
+  const frame = state.framing[drag.output];
+  frame.x = Math.max(-1, Math.min(1, drag.frameX + 2 * (event.clientX - drag.x) / (rect.width * horizontal)));
+  frame.y = Math.max(-1, Math.min(1, drag.frameY + 2 * (event.clientY - drag.y) / (rect.height * vertical)));
   renderPreview();
 });
 function endDrag() { if (!drag) return; drag = null; previewCanvas.classList.remove('dragging'); save(); }
@@ -491,10 +509,11 @@ previewCanvas.addEventListener('pointerup', endDrag); previewCanvas.addEventList
 previewCanvas.addEventListener('keydown', (event) => {
   if (!state.art || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
   event.preventDefault(); const step = event.shiftKey ? .15 : .05;
-  if (event.key === 'ArrowLeft') state.artX = Math.max(-1, state.artX - step);
-  if (event.key === 'ArrowRight') state.artX = Math.min(1, state.artX + step);
-  if (event.key === 'ArrowUp') state.artY = Math.max(-1, state.artY - step);
-  if (event.key === 'ArrowDown') state.artY = Math.min(1, state.artY + step);
+  const frame = state.framing[state.output];
+  if (event.key === 'ArrowLeft') frame.x = Math.max(-1, frame.x - step);
+  if (event.key === 'ArrowRight') frame.x = Math.min(1, frame.x + step);
+  if (event.key === 'ArrowUp') frame.y = Math.max(-1, frame.y - step);
+  if (event.key === 'ArrowDown') frame.y = Math.min(1, frame.y + step);
   renderPreview(); save();
 });
 $('download-current').addEventListener('click', downloadCurrent);
