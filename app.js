@@ -303,6 +303,15 @@ function pumpDescription(d) {
   return idea && description && !description.toLowerCase().includes(idea.toLowerCase()) ? `${idea}\n\n${description}` : description || idea;
 }
 function pumpFields(d) { return { name: d.name, ticker: d.ticker, description: pumpDescription(d), website: d.website, social: d.social, telegram: d.telegram }; }
+function pumpSummary(d) {
+  const values = pumpFields(d);
+  return [
+    `Coin name: ${values.name}`,
+    `Ticker: ${values.ticker}`,
+    `Description: ${values.description || ''}`,
+    ...[['Website', values.website], ['X profile', values.social], ['Telegram', values.telegram]].filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`)
+  ].join('\n\n');
+}
 function updatePumpHandoff() {
   const values = pumpFields(form());
   document.querySelectorAll('[data-pump-field]').forEach((row) => {
@@ -380,8 +389,8 @@ function imagePrompt(d) {
   return `Create a striking square profile image${project}.${idea} Show one memorable subject with a bold silhouette, rich lighting, and a polished visual style. Keep the subject centered with breathing room so the image also works in a wide banner crop. Make it recognizable at a tiny avatar size. No words, letters, ticker symbols, logos, watermarks, or interface elements. 1:1 aspect ratio.`;
 }
 async function copyText(value, success) {
-  try { await navigator.clipboard.writeText(value); toast(success); }
-  catch { toast('Copy failed. Select the text and copy it manually.'); }
+  try { await navigator.clipboard.writeText(value); toast(success); return true; }
+  catch { toast('Copy failed. Use the field buttons or select the text manually.'); return false; }
 }
 async function importToken() {
   const mint = mintFromInput(form().mint), button = $('import-token'), status = $('import-status'), serial = ++state.importSerial;
@@ -456,6 +465,12 @@ async function scanNames() {
   finally { if (serial === state.scanSerial) { button.disabled = false; button.textContent = 'Search possible matches ↗'; } }
 }
 restore(); render(); openSharedAddress();
+try {
+  if (!state.shareMode && sessionStorage.getItem('mintframe-pump-handoff-open') === '1') {
+    $('pump-handoff-details').hidden = false;
+    $('prepare-pump').setAttribute('aria-expanded', 'true');
+  }
+} catch { /* Handoff state is optional in restricted browser modes. */ }
 if (document.fonts?.ready) document.fonts.ready.then(render);
 fields.forEach((id) => $(id).addEventListener('input', () => {
   if (id === 'mint-address') {
@@ -533,12 +548,22 @@ previewCanvas.addEventListener('keydown', (event) => {
 });
 $('download-current').addEventListener('click', downloadCurrent);
 $('download-kit').addEventListener('click', downloadKit);
-$('prepare-pump').addEventListener('click', () => {
+$('prepare-pump').addEventListener('click', async () => {
   const d = form();
   if (!d.name || !d.ticker) { toast('Add a coin name and ticker first.'); (!d.name ? $('coin-name') : $('ticker')).focus(); return; }
   const details = $('pump-handoff-details'), open = details.hidden;
   details.hidden = !open; $('prepare-pump').setAttribute('aria-expanded', String(open));
-  if (open) { updatePumpHandoff(); details.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); }
+  try { if (open) sessionStorage.setItem('mintframe-pump-handoff-open', '1'); else sessionStorage.removeItem('mintframe-pump-handoff-open'); }
+  catch { /* Handoff state is optional in restricted browser modes. */ }
+  if (open) {
+    updatePumpHandoff(); details.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
+    const copied = await copyText(pumpSummary(d), 'All coin details copied');
+    $('handoff-copy-status').textContent = copied ? 'Details copied as one note. Use the field buttons below to paste one field at a time.' : 'Clipboard access failed. Use the field buttons below or select the text manually.';
+  }
+});
+$('copy-pump-details').addEventListener('click', async () => {
+  const copied = await copyText(pumpSummary(form()), 'All coin details copied');
+  $('handoff-copy-status').textContent = copied ? 'Details copied as one note. Use the field buttons below to paste one field at a time.' : 'Clipboard access failed. Use the field buttons below or select the text manually.';
 });
 $('save-pump-image').addEventListener('click', () => downloadPumpAsset('icon'));
 $('save-pump-banner').addEventListener('click', () => downloadPumpAsset('banner'));
