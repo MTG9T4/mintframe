@@ -2,13 +2,13 @@
 
 ## Product first
 
-Publish the studio and let creators use it without a token. The first proof of demand is people exporting kits, sharing exact-address cards, and returning for another launch. Gather creator feedback in public and improve the tool around actual points of friction.
+Publish the studio and let creators use it without a token. The first proof of demand is people exporting kits, sharing exact-address links, and returning for another launch. Gather creator feedback in public and improve the tool around actual points of friction. Add privacy-respecting aggregate usage measurement before making claims about adoption; the current static site does not count users or exports.
 
 ## Distribution
 
 1. Post a short screen recording of a launch kit being made in under a minute. Link directly to the free studio and show a real exported pack.
 2. Give a few active Pump creators tailored launch assets with permission to feature their examples. Share their work and credit them; avoid invented endorsements or metrics.
-3. Make the exact-address card recognizable as a MintFrame export so each legitimate use can lead other creators back to the tool. Do not obscure the full address.
+3. Share the exact-address card and MintFrame link for a real launch. The link lets anyone copy the full mint and inspect the official Pump page. State clearly that a user supplied the address; do not imply MintFrame verified ownership.
 4. Keep shipping small, visible improvements based on creator requests. Potential next features: editable layouts, better type handling, and optional wallet-signed ownership proof for canonical pages.
 
 ## Possible future token

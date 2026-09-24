@@ -1,29 +1,34 @@
 const $ = (id) => document.getElementById(id);
-const fields = ['coin-name', 'ticker', 'tagline', 'description', 'website', 'social', 'mint-address'];
+const fields = ['coin-name', 'ticker', 'tagline', 'description', 'website', 'social', 'telegram', 'mint-address'];
 const sizes = { icon: [1200, 1200], banner: [1500, 500], social: [1200, 675], story: [1080, 1920] };
 const palettes = {
   electric: { base: '#0b191c', mid: '#25473a', glow: '#92b83f', accent: '#c8ff3d', pale: '#f1ffe0', dim: '#8aa998' },
   ember: { base: '#21141b', mid: '#613027', glow: '#b45535', accent: '#ff8559', pale: '#fff0e3', dim: '#d1a190' },
   chrome: { base: '#101921', mid: '#315066', glow: '#678da8', accent: '#b8deef', pale: '#eefaff', dim: '#a0baca' }
 };
-const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, toastTimer: null };
+const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, artZoom: 1, artX: 0, artY: 0, shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
 
 function form() {
   return {
     name: $('coin-name').value.trim(), ticker: $('ticker').value.trim().replace(/^\$/, '').toUpperCase(),
     tagline: $('tagline').value.trim(), description: $('description').value.trim(),
-    website: $('website').value.trim(), social: $('social').value.trim(), mint: $('mint-address').value.trim()
+    website: $('website').value.trim(), social: $('social').value.trim(), telegram: $('telegram').value.trim(), mint: $('mint-address').value.trim()
   };
 }
 function save() {
-  const { mint, ...draft } = form();
-  localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...draft, mint, theme: state.theme }));
+  if (state.shareMode) return;
+  try { localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...form(), theme: state.theme, artZoom: state.artZoom, artX: state.artX, artY: state.artY })); }
+  catch { /* Draft saving is optional in restricted browser modes. */ }
 }
 function restore() {
   try {
     const draft = JSON.parse(localStorage.getItem('mintframe-draft-v1') || '{}');
-    const mapping = { name: 'coin-name', ticker: 'ticker', tagline: 'tagline', description: 'description', website: 'website', social: 'social', mint: 'mint-address' };
+    const mapping = { name: 'coin-name', ticker: 'ticker', tagline: 'tagline', description: 'description', website: 'website', social: 'social', telegram: 'telegram', mint: 'mint-address' };
     Object.entries(mapping).forEach(([key, id]) => { if (typeof draft[key] === 'string') $(id).value = draft[key]; });
+    state.artZoom = Number.isFinite(draft.artZoom) ? Math.min(2.2, Math.max(1, draft.artZoom)) : 1;
+    state.artX = Number.isFinite(draft.artX) ? Math.min(1, Math.max(-1, draft.artX)) : 0;
+    state.artY = Number.isFinite(draft.artY) ? Math.min(1, Math.max(-1, draft.artY)) : 0;
+    $('art-zoom').value = Math.round(state.artZoom * 100); $('zoom-value').textContent = `${Math.round(state.artZoom * 100)}%`;
     if (palettes[draft.theme]) setTheme(draft.theme, false);
   } catch { /* A corrupted local draft should not prevent the studio from opening. */ }
 }
@@ -46,6 +51,10 @@ function validUrl(raw, host) {
   try { const url = new URL(raw); return ['http:', 'https:'].includes(url.protocol) && (!host || ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'].includes(url.hostname)); }
   catch { return false; }
 }
+function validTelegram(raw) {
+  if (!validUrl(raw)) return false;
+  return ['t.me', 'www.t.me', 'telegram.me', 'www.telegram.me'].includes(new URL(raw).hostname);
+}
 function validMint(address) {
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) return false;
   let number = 0n;
@@ -56,32 +65,45 @@ function validMint(address) {
   for (const char of address) { if (char === '1') count++; else break; }
   return count === 32;
 }
+function mintFromInput(raw) {
+  const value = raw.trim();
+  if (validMint(value)) return value;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || !['pump.fun', 'www.pump.fun'].includes(url.hostname)) return null;
+    const match = url.pathname.match(/^\/coin\/([^/]+)\/?$/);
+    return match && validMint(match[1]) ? match[1] : null;
+  } catch { return null; }
+}
 function updateChecks() {
   const d = form();
   const checks = [
     ['Name and ticker', !!d.name && !!d.ticker, 'A name and short, recognizable symbol are ready.'],
-    ['Clear description', d.description.length >= 25, 'Explain the idea in at least one complete sentence.'],
-    ['Coin image', !state.artInfo || state.artInfo.width >= 1000 && state.artInfo.height >= 1000 && state.artInfo.width === state.artInfo.height && state.artInfo.size <= 15e6, 'Export is 1200 × 1200. Custom art should be square and at least 1000 × 1000.'],
+    ['Clear description', d.description.length >= 25, 'Recommended: explain the idea in at least one complete sentence.'],
+    ['Coin image', !state.artInfo || Math.min(state.artInfo.width, state.artInfo.height) >= 1000, 'Export is 1200 × 1200. Custom art looks best when its short side is at least 1000px.'],
     ['Website link', !d.website || validUrl(d.website), 'Optional. If added, use a complete http:// or https:// link.'],
     ['X profile', !d.social || validUrl(d.social, true), 'Optional. If added, use a complete x.com profile link.'],
+    ['Telegram', !d.telegram || validTelegram(d.telegram), 'Optional. If added, use a complete t.me link.'],
     ['Launch assets', !!d.name && !!d.ticker && !!d.tagline, 'Your name, ticker and one-line idea populate every export.']
   ];
   const score = checks.filter((check) => check[1]).length;
-  $('readiness-score').textContent = `${score}/6`;
+  $('readiness-score').textContent = `${score}/${checks.length}`;
   $('score-fill').style.width = `${100 * score / checks.length}%`;
-  $('readiness-summary').textContent = score === 6 ? 'Ready for a careful final review on Pump.' : `${checks.length - score} item${checks.length - score === 1 ? '' : 's'} to review before opening Pump.`;
+  $('readiness-summary').textContent = score === checks.length ? 'Ready for a careful final review on Pump.' : `${checks.length - score} item${checks.length - score === 1 ? '' : 's'} to review before opening Pump.`;
   $('check-list').replaceChildren(...checks.map(([title, good, detail]) => {
     const item = document.createElement('div'); item.className = `check-item ${good ? 'good' : ''}`;
     const icon = document.createElement('span'); icon.className = 'check-icon'; icon.textContent = good ? '✓' : '·';
     const content = document.createElement('div'); const heading = document.createElement('strong'); heading.textContent = title;
     const p = document.createElement('p'); p.textContent = detail; content.append(heading, p); item.append(icon, content); return item;
   }));
-  const mintOk = validMint(d.mint);
+  const mintOk = !!mintFromInput(d.mint);
   const msg = $('mint-message'); msg.className = `mint-message ${d.mint ? mintOk ? 'success' : 'error' : ''}`;
-  msg.textContent = !d.mint ? 'The address is shown exactly as entered. Always confirm it on Pump before sharing.' : mintOk ? 'Valid Solana address format. Confirm this exact address on the official Pump coin page.' : 'This is not a complete Solana mint address. Paste the full address.';
+  msg.textContent = !d.mint ? 'A valid address format is not proof of ownership. Always confirm on Pump.' : mintOk ? 'Valid address format. Confirm this exact mint on the official Pump coin page.' : 'Paste a full Solana mint address or a Pump coin URL.';
   $('copy-address').disabled = !mintOk; $('download-mint').disabled = !mintOk;
+  $('import-token').disabled = !mintOk; $('copy-share-link').disabled = !mintOk;
+  $('copy-post').textContent = mintOk ? 'Copy launch post' : 'Copy teaser post';
   const link = $('pump-link'); link.hidden = !mintOk;
-  if (mintOk) link.href = `https://pump.fun/coin/${d.mint}`;
+  if (mintOk) link.href = `https://pump.fun/coin/${mintFromInput(d.mint)}`;
 }
 
 function backdrop(ctx, w, h, p) {
@@ -116,9 +138,12 @@ function wrapText(ctx, text, maxWidth, maxLines = 3) {
   return lines;
 }
 function drawImageCover(ctx, image, x, y, w, h, radius = 0) {
-  const ratio = Math.max(w / image.width, h / image.height), iw = image.width * ratio, ih = image.height * ratio;
+  const ratio = Math.max(w / image.width, h / image.height) * state.artZoom, iw = image.width * ratio, ih = image.height * ratio;
+  const dx = x + (w - iw) / 2 + state.artX * Math.max(0, (iw - w) / 2);
+  const dy = y + (h - ih) / 2 + state.artY * Math.max(0, (ih - h) / 2);
   ctx.save(); if (radius) { ctx.beginPath(); ctx.roundRect(x, y, w, h, radius); ctx.clip(); }
-  ctx.drawImage(image, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); ctx.restore();
+  else { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); }
+  ctx.drawImage(image, dx, dy, iw, ih); ctx.restore();
 }
 function star(ctx, x, y, radius, color) {
   ctx.save(); ctx.translate(x, y); ctx.fillStyle = color; ctx.beginPath();
@@ -138,14 +163,14 @@ function drawAsset(canvas, output) {
     } else { ctx.save(); ctx.shadowColor = p.accent; ctx.shadowBlur = 110; star(ctx, 780, 405, 270, p.accent); ctx.restore(); star(ctx, 780, 405, 270, p.accent); }
     frame(ctx, w, h, p, 36); label(ctx, 'MF / LAUNCH STUDIO', 75, 100, p.pale, 23);
     label(ctx, `01 / ${ticker}`, 75, 805, p.accent, 24); fitText(ctx, name, 1060, 140, 700, 44);
-    ctx.fillStyle = p.pale; ctx.fillText(name, 70, 945);
+    ctx.fillStyle = p.pale; ctx.fillText(name, 70, 945, 1060);
     ctx.font = '500 30px "DM Mono", monospace'; ctx.fillStyle = p.pale; ctx.fillText(tagline.slice(0, 48), 75, 1015);
     ctx.fillStyle = p.accent; ctx.fillRect(75, 1062, 1050, 2); label(ctx, 'A NEW SIGNAL STARTS HERE', 75, 1115, p.pale, 20);
   } else if (output === 'banner') {
     if (state.art) { drawImageCover(ctx, state.art, 830, 0, 670, h); ctx.fillStyle = p.base + '44'; ctx.fillRect(830, 0, 670, h); }
     else { star(ctx, 1170, 245, 200, p.accent); }
     frame(ctx, w, h, p, 19); label(ctx, `NEW / ${ticker}`, 56, 70, p.accent, 20);
-    fitText(ctx, name, 820, 100, 700, 39); ctx.fillStyle = p.pale; ctx.fillText(name, 52, 280);
+    fitText(ctx, name, 820, 100, 700, 39); ctx.fillStyle = p.pale; ctx.fillText(name, 52, 280, 820);
     ctx.fillStyle = p.accent; ctx.fillRect(56, 322, 100, 4); label(ctx, tagline.slice(0, 48), 56, 382, p.pale, 21);
     label(ctx, 'MINTFRAME / MADE TO LAUNCH', 56, 452, p.dim, 16);
   } else if (output === 'social') {
@@ -153,7 +178,7 @@ function drawAsset(canvas, output) {
     else star(ctx, 950, 315, 182, p.accent);
     frame(ctx, w, h, p, 28); label(ctx, `INTRODUCING / $${ticker}`, 62, 95, p.accent, 21);
     ctx.font = '700 104px "Space Grotesk", Arial, sans-serif'; const lines = wrapText(ctx, name, 650, 3); fitText(ctx, lines[0] || name, 650, 104, 700, 42);
-    ctx.fillStyle = p.pale; lines.forEach((line, i) => ctx.fillText(line, 56, 290 + i * 105));
+    ctx.fillStyle = p.pale; lines.forEach((line, i) => ctx.fillText(line, 56, 290 + i * 105, 650));
     ctx.fillStyle = p.accent; ctx.fillRect(61, 510, 72, 4); label(ctx, tagline.slice(0, 40), 61, 570, p.pale, 19);
     label(ctx, 'A NEW IDEA, READY FOR THE WORLD.', 61, 628, p.dim, 16);
   } else {
@@ -162,7 +187,7 @@ function drawAsset(canvas, output) {
     frame(ctx, w, h, p, 38); label(ctx, `THE LAUNCH / $${ticker}`, 85, 132, p.accent, 24);
     ctx.fillStyle = p.base + 'dd'; ctx.fillRect(45, 1280, 990, 460);
     ctx.font = '700 125px "Space Grotesk", Arial, sans-serif'; const lines = wrapText(ctx, name, 870, 3); fitText(ctx, lines[0] || name, 870, 125, 700, 46);
-    ctx.fillStyle = p.pale; lines.forEach((line, i) => ctx.fillText(line, 85, 1420 + i * 132));
+    ctx.fillStyle = p.pale; lines.forEach((line, i) => ctx.fillText(line, 85, 1420 + i * 132, 870));
     label(ctx, tagline.slice(0, 38), 87, 1640, p.accent, 25); label(ctx, 'YOUR IDEA. OUT IN THE OPEN.', 87, 1813, p.dim, 22);
   }
 }
@@ -170,16 +195,37 @@ function drawMint() {
   const canvas = $('mint-preview'), ctx = canvas.getContext('2d'), d = form(), p = palettes[state.theme], w = canvas.width, h = canvas.height;
   backdrop(ctx, w, h, p); frame(ctx, w, h, p, 24);
   label(ctx, 'THE EXACT MINT / SOLANA', 60, 82, p.accent, 19);
-  const name = (d.name || 'YOUR PROJECT').toUpperCase(); fitText(ctx, name, 920, 98, 700, 42);
-  ctx.fillStyle = p.pale; ctx.fillText(name, 54, 230); star(ctx, 1050, 175, 88, p.accent);
-  ctx.fillStyle = '#07120ddd'; ctx.roundRect(53, 350, 1094, 168, 10); ctx.fill();
+  const name = (d.name || (mintFromInput(d.mint) ? 'SOLANA MINT' : 'YOUR PROJECT')).toUpperCase(); fitText(ctx, name, 920, 98, 700, 42);
+  ctx.fillStyle = p.pale; ctx.fillText(name, 54, 230, 920); star(ctx, 1050, 175, 88, p.accent);
+  ctx.fillStyle = '#07120ddd'; ctx.beginPath(); ctx.roundRect(53, 350, 1094, 168, 10); ctx.fill();
   label(ctx, 'CONTRACT ADDRESS / COPY THE FULL STRING', 78, 393, p.dim, 16);
-  const address = validMint(d.mint) ? d.mint : 'ADD THE MINT ADDRESS AFTER LAUNCH';
+  const address = mintFromInput(d.mint) || 'ADD THE MINT ADDRESS AFTER LAUNCH';
   ctx.fillStyle = p.pale; fitText(ctx, address, 1040, 40, 500, 23); ctx.fillText(address, 77, 457);
   label(ctx, 'CONFIRM ON PUMP.FUN BEFORE SHARING', 60, 598, p.pale, 17);
   label(ctx, 'MINTFRAME / EXACT ADDRESS CARD', 775, 598, p.dim, 13);
 }
-function render() { drawAsset($('preview'), state.output); drawMint(); updateChecks(); }
+const outputDescriptions = {
+  icon: 'Square PNG · Pump image max 15 MB',
+  banner: '1500 × 500 JPG · Pump banner max 5 MB',
+  social: 'Landscape PNG · made for a social post',
+  story: 'Vertical PNG · made for a story'
+};
+function renderPreview() {
+  drawAsset($('preview'), state.output);
+  const output = state.output, serial = ++state.previewSerial, note = $('output-note');
+  note.textContent = `${outputDescriptions[output]} · measuring…`;
+  clearTimeout(state.previewTimer);
+  state.previewTimer = setTimeout(async () => {
+    try {
+      const blob = await assetBlob($('preview'), output);
+      if (serial === state.previewSerial) note.textContent = `${outputDescriptions[output]} · ${(blob.size / 1e6).toFixed(2)} MB`;
+    } catch { if (serial === state.previewSerial) note.textContent = 'Export size could not be checked. Try another image.'; }
+  }, 300);
+}
+function render() {
+  renderPreview(); drawMint(); updateChecks();
+  $('preview').parentElement.classList.toggle('has-art', !!state.art);
+}
 function selectOutput(output) {
   state.output = output;
   document.querySelectorAll('.preview-tabs button').forEach((button) => {
@@ -188,13 +234,22 @@ function selectOutput(output) {
   $('preview-size').textContent = `${sizes[output][0]} × ${sizes[output][1]} PX`;
   render();
 }
-function canvasBlob(canvas) { return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Could not create image')), 'image/png')); }
+function canvasBlob(canvas, type = 'image/png', quality) { return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Could not create image')), type, quality)); }
+async function assetBlob(canvas, output) {
+  if (output !== 'banner') return canvasBlob(canvas);
+  for (const quality of [.94, .85, .7, .5]) {
+    const blob = await canvasBlob(canvas, 'image/jpeg', quality);
+    if (blob.type !== 'image/jpeg') throw new Error('JPEG export is unavailable in this browser');
+    if (blob.size <= 5e6) return blob;
+  }
+  throw new Error('Banner exceeds Pump size limit');
+}
 function download(blob, name) { const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
 const slug = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 38) || 'my-coin';
-function pngName(output) { return `mintframe-${slug(form().name)}-${output}.png`; }
-async function downloadCurrent() { try { download(await canvasBlob($('preview')), pngName(state.output)); toast('Asset downloaded'); } catch { toast('Export failed. Please try again.'); } }
+function assetName(output) { return `mintframe-${slug(form().name)}-${output}.${output === 'banner' ? 'jpg' : 'png'}`; }
+async function downloadCurrent() { try { download(await assetBlob($('preview'), state.output), assetName(state.output)); toast('Asset downloaded'); } catch { toast('Export failed. Please try again.'); } }
 
-// A small ZIP writer uses the uncompressed ZIP format. PNGs are already compressed.
+// A small ZIP writer uses the uncompressed ZIP format. PNGs and JPEGs are already compressed.
 const crcTable = new Uint32Array(256);
 for (let i = 0; i < 256; i++) { let c = i; for (let n = 0; n < 8; n++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcTable[i] = c >>> 0; }
 function crc32(data) { let c = 0xffffffff; for (const byte of data) c = crcTable[(c ^ byte) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
@@ -216,13 +271,15 @@ function zip(files) {
 async function downloadKit() {
   const d = form(), button = $('download-kit'); button.disabled = true; button.textContent = 'Building your kit…';
   try {
+    if (!d.name || !d.ticker || !d.tagline) { toast('Add a name, ticker, and one-line idea first.'); return; }
     const files = [];
     for (const output of Object.keys(sizes)) {
       const canvas = document.createElement('canvas'); drawAsset(canvas, output);
-      files.push({ name: pngName(output), data: new Uint8Array(await (await canvasBlob(canvas)).arrayBuffer()) });
+      files.push({ name: assetName(output), data: new Uint8Array(await (await assetBlob(canvas, output)).arrayBuffer()) });
     }
-    if (validMint(d.mint)) files.push({ name: 'exact-mint-card.png', data: new Uint8Array(await (await canvasBlob($('mint-preview'))).arrayBuffer()) });
-    const copy = `PROJECT: ${d.name}\nTICKER: $${d.ticker}\n\nDESCRIPTION\n${d.description}\n\nX ANNOUNCEMENT DRAFT\nIntroducing $${d.ticker}: ${d.tagline}\n\n${d.description}\n${validMint(d.mint) ? `\nExact mint: ${d.mint}\nPump: https://pump.fun/coin/${d.mint}` : '\nAdd the exact mint address after launch and verify it on Pump before posting.'}\n${d.website ? `\nWebsite: ${d.website}` : ''}${d.social ? `\nX: ${d.social}` : ''}\n\nFINAL CHECKLIST\n[ ] Confirm all metadata on Pump's create form\n[ ] Confirm uploaded image and banner crop\n[ ] Confirm website and X links\n[ ] Create token and copy the full mint from Pump\n[ ] Update every public post with the exact mint\n\nImages and text made with MintFrame. No account or wallet required.\n`;
+    const mint = mintFromInput(d.mint);
+    if (mint) files.push({ name: 'exact-mint-card.png', data: new Uint8Array(await (await canvasBlob($('mint-preview'))).arrayBuffer()) });
+    const copy = `PROJECT: ${d.name}\nTICKER: $${d.ticker}\n\nDESCRIPTION\n${d.description}\n\nX POST DRAFT\n${launchPost(d)}\n${d.website ? `\nWebsite: ${d.website}` : ''}${d.social ? `\nX: ${d.social}` : ''}${d.telegram ? `\nTelegram: ${d.telegram}` : ''}\n${mint ? `\nShareable MintFrame link: ${shareUrl(mint)}` : ''}\n\nFINAL CHECKLIST\n[ ] Confirm all metadata on Pump's create form\n[ ] Confirm image and banner crop; banner is under 5 MB\n[ ] Confirm website, X, and Telegram links\n[ ] Create token and copy the full mint from Pump\n[ ] Verify the exact mint on Pump before posting\n\nImages and text made with MintFrame. No account or wallet required.\n`;
     files.push({ name: 'launch-copy-and-checklist.txt', data: new TextEncoder().encode(copy) });
     download(zip(files), `mintframe-${slug(d.name)}-launch-kit.zip`); toast('Your launch kit is ready');
   } catch (error) { console.error(error); toast('Kit export failed. Please try again.'); }
@@ -234,16 +291,64 @@ function loadArt(file) {
   const url = URL.createObjectURL(file), image = new Image();
   image.onload = () => {
     state.art = image; state.artInfo = { width: image.width, height: image.height, size: file.size };
+    state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-zoom').value = 100; $('zoom-value').textContent = '100%';
     $('upload-title').textContent = file.name; $('upload-subtitle').textContent = `${image.width} × ${image.height} · ${Math.round(file.size / 1024)} KB`;
-    $('remove-art').hidden = false; render(); URL.revokeObjectURL(url);
-    if (image.width < 1000 || image.height < 1000 || image.width !== image.height) toast('Art loaded. Pump recommends a square image at least 1000 × 1000.');
+    $('remove-art').hidden = false; $('art-framing').hidden = false; render(); URL.revokeObjectURL(url);
+    if (Math.min(image.width, image.height) < 1000) toast('Art loaded. A source at least 1000px on its short side will look sharper.');
     else toast('Artwork loaded');
   };
   image.onerror = () => { URL.revokeObjectURL(url); toast('Could not open that image.'); };
   image.src = url;
 }
+function shareUrl(mint) {
+  const url = new URL(location.pathname, location.origin); url.searchParams.set('mint', mint); url.hash = 'identity'; return url.href;
+}
+function launchPost(d) {
+  const mint = mintFromInput(d.mint);
+  const suffix = mint ? `\n\nCA: ${mint}\nhttps://pump.fun/coin/${mint}` : '\n\nLaunch details coming soon.';
+  const lead = `${d.name} ($${d.ticker})${d.tagline ? ` — ${d.tagline}` : ''}`.trim();
+  const limit = 280 - suffix.length;
+  const short = lead.length <= limit ? lead : `${lead.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
+  return short + suffix;
+}
+async function copyText(value, success) {
+  try { await navigator.clipboard.writeText(value); toast(success); }
+  catch { toast('Copy failed. Select the text and copy it manually.'); }
+}
+async function importToken() {
+  const mint = mintFromInput(form().mint), button = $('import-token'), status = $('import-status'), serial = ++state.importSerial;
+  if (!mint) return;
+  button.disabled = true; button.textContent = '↘ Looking up token…'; status.className = 'import-status'; status.textContent = 'Checking DEX Screener for this exact address…';
+  try {
+    const response = await fetch(`https://api.dexscreener.com/token-pairs/v1/solana/${mint}`, { signal: AbortSignal.timeout(12000) });
+    if (!response.ok) throw new Error(`Token lookup unavailable (${response.status})`);
+    const pairs = await response.json();
+    if (serial !== state.importSerial) return;
+    const pair = Array.isArray(pairs) && pairs.find((item) => item.chainId === 'solana' && (item.baseToken?.address === mint || item.quoteToken?.address === mint));
+    if (!pair) { status.textContent = 'No indexed pair found yet. New Pump launches can take time to appear; the address link still works.'; return; }
+    const token = pair.baseToken?.address === mint ? pair.baseToken : pair.quoteToken;
+    const name = (token.name || '').slice(0, 32), ticker = (token.symbol || '').slice(0, 12);
+    const filled = [];
+    if (!$('coin-name').value.trim() && name) { $('coin-name').value = name; filled.push('name'); }
+    if (!$('ticker').value.trim() && ticker) { $('ticker').value = ticker; filled.push('ticker'); }
+    status.className = 'import-status success';
+    status.textContent = `DEX Screener indexes this as ${name || 'unnamed'} (${ticker || '?'}). ${filled.length ? 'Blank fields filled.' : 'Your existing text was kept.'} Labels are not ownership verification.`;
+    save(); render();
+  } catch (error) { if (serial === state.importSerial) { console.error(error); status.className = 'import-status error'; status.textContent = 'Token lookup is unavailable. You can still use the full address and Pump link.'; } }
+  finally { if (serial === state.importSerial) { button.disabled = false; button.textContent = '↘ Load indexed name and ticker'; } }
+}
+function openSharedAddress() {
+  const mint = mintFromInput(new URLSearchParams(location.search).get('mint') || '');
+  if (!mint) return;
+  state.shareMode = true;
+  for (const id of fields) if (id !== 'mint-address') $(id).value = '';
+  $('mint-address').value = mint;
+  $('shared-banner').hidden = false;
+  render();
+  void importToken();
+}
 async function scanNames() {
-  const d = form(), query = d.name || d.ticker, button = $('scan-names'), results = $('collision-results');
+  const d = form(), query = d.name || d.ticker, button = $('scan-names'), results = $('collision-results'), serial = ++state.scanSerial;
   if (!query) { toast('Add a project name or ticker first.'); return; }
   button.disabled = true; button.textContent = 'Searching…';
   results.replaceChildren();
@@ -255,6 +360,7 @@ async function scanNames() {
       if (!response.ok) throw new Error(`Search unavailable (${response.status})`);
       return response.json();
     }));
+    if (serial !== state.scanSerial) return;
     const matches = new Map(), names = [d.name, d.ticker].filter(Boolean).map((value) => value.toLowerCase());
     for (const data of responses) for (const pair of data.pairs || []) {
       if (pair.chainId !== 'solana') continue;
@@ -278,18 +384,61 @@ async function scanNames() {
       card.append(title, address, note, link); cards.append(card);
     }
     results.append(cards);
-  } catch (error) { console.error(error); status.textContent = 'Search is temporarily unavailable. Try again later; the launch studio still works offline.'; results.replaceChildren(status); }
-  finally { button.disabled = false; button.textContent = 'Search possible matches ↗'; }
+  } catch (error) { if (serial === state.scanSerial) { console.error(error); status.textContent = 'Search is temporarily unavailable. Try again later; the launch studio still works offline.'; results.replaceChildren(status); } }
+  finally { if (serial === state.scanSerial) { button.disabled = false; button.textContent = 'Search possible matches ↗'; } }
 }
-restore(); render();
-fields.forEach((id) => $(id).addEventListener('input', () => { save(); render(); if (['coin-name', 'ticker', 'mint-address'].includes(id)) $('collision-results').replaceChildren(); }));
+restore(); render(); openSharedAddress();
+if (document.fonts?.ready) document.fonts.ready.then(render);
+fields.forEach((id) => $(id).addEventListener('input', () => {
+  if (id === 'mint-address') {
+    state.importSerial++;
+    const mint = mintFromInput($(id).value);
+    if (mint && $(id).value !== mint) $(id).value = mint;
+    $('import-status').textContent = 'Optional: load public token labels from DEX Screener after launch.';
+    $('import-status').className = 'import-status';
+    $('import-token').textContent = '↘ Load indexed name and ticker';
+  }
+  save(); render(); if (['coin-name', 'ticker', 'mint-address'].includes(id)) { state.scanSerial++; $('scan-names').disabled = false; $('scan-names').textContent = 'Search possible matches ↗'; $('collision-results').replaceChildren(); }
+}));
 document.querySelectorAll('.theme').forEach((button) => button.addEventListener('click', () => setTheme(button.dataset.theme)));
 document.querySelectorAll('.preview-tabs button').forEach((button) => button.addEventListener('click', () => selectOutput(button.dataset.output)));
 $('upload-button').addEventListener('click', () => $('art-upload').click());
 $('art-upload').addEventListener('change', (event) => loadArt(event.target.files[0]));
-$('remove-art').addEventListener('click', () => { state.art = null; state.artInfo = null; $('art-upload').value = ''; $('upload-title').textContent = 'Add your artwork'; $('upload-subtitle').textContent = 'PNG, JPG or WebP · kept on this device'; $('remove-art').hidden = true; render(); });
+$('remove-art').addEventListener('click', () => { state.art = null; state.artInfo = null; state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-upload').value = ''; $('upload-title').textContent = 'Add your artwork'; $('upload-subtitle').textContent = 'PNG, JPG or WebP · kept on this device'; $('remove-art').hidden = true; $('art-framing').hidden = true; render(); save(); });
+$('art-zoom').addEventListener('input', (event) => { state.artZoom = Number(event.target.value) / 100; $('zoom-value').textContent = `${event.target.value}%`; renderPreview(); save(); });
+$('reset-framing').addEventListener('click', () => { state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-zoom').value = 100; $('zoom-value').textContent = '100%'; renderPreview(); save(); });
+const previewCanvas = $('preview'); let drag = null;
+previewCanvas.addEventListener('pointerdown', (event) => {
+  if (!state.art) return;
+  drag = { x: event.clientX, y: event.clientY, artX: state.artX, artY: state.artY };
+  previewCanvas.setPointerCapture(event.pointerId); previewCanvas.classList.add('dragging');
+});
+previewCanvas.addEventListener('pointermove', (event) => {
+  if (!drag) return;
+  const rect = previewCanvas.getBoundingClientRect();
+  const horizontal = { icon: 1, banner: 670 / 1500, social: 480 / 1200, story: 1 }[state.output];
+  const vertical = state.output === 'story' ? 1050 / 1920 : 1;
+  state.artX = Math.max(-1, Math.min(1, drag.artX + 2 * (event.clientX - drag.x) / (rect.width * horizontal)));
+  state.artY = Math.max(-1, Math.min(1, drag.artY + 2 * (event.clientY - drag.y) / (rect.height * vertical)));
+  renderPreview();
+});
+function endDrag() { if (!drag) return; drag = null; previewCanvas.classList.remove('dragging'); save(); }
+previewCanvas.addEventListener('pointerup', endDrag); previewCanvas.addEventListener('pointercancel', endDrag);
+previewCanvas.addEventListener('keydown', (event) => {
+  if (!state.art || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+  event.preventDefault(); const step = event.shiftKey ? .15 : .05;
+  if (event.key === 'ArrowLeft') state.artX = Math.max(-1, state.artX - step);
+  if (event.key === 'ArrowRight') state.artX = Math.min(1, state.artX + step);
+  if (event.key === 'ArrowUp') state.artY = Math.max(-1, state.artY - step);
+  if (event.key === 'ArrowDown') state.artY = Math.min(1, state.artY + step);
+  renderPreview(); save();
+});
 $('download-current').addEventListener('click', downloadCurrent);
 $('download-kit').addEventListener('click', downloadKit);
-$('copy-address').addEventListener('click', async () => { if (!validMint(form().mint)) return; try { await navigator.clipboard.writeText(form().mint); toast('Full mint address copied'); } catch { toast('Copy failed. Select and copy the address above.'); } });
-$('download-mint').addEventListener('click', async () => { if (!validMint(form().mint)) return; try { download(await canvasBlob($('mint-preview')), `mintframe-${slug(form().name)}-exact-mint.png`); toast('Address card downloaded'); } catch { toast('Export failed. Please try again.'); } });
+$('copy-post').addEventListener('click', async () => { const d = form(); if (!d.name || !d.ticker) { toast('Add a project name and ticker first.'); return; } await copyText(launchPost(d), 'Post draft copied'); });
+$('copy-address').addEventListener('click', async () => { const mint = mintFromInput(form().mint); if (mint) await copyText(mint, 'Full mint address copied'); });
+$('download-mint').addEventListener('click', async () => { if (!mintFromInput(form().mint)) return; try { download(await canvasBlob($('mint-preview')), `mintframe-${slug(form().name)}-exact-mint.png`); toast('Address card downloaded'); } catch { toast('Export failed. Please try again.'); } });
+$('copy-share-link').addEventListener('click', async () => { const mint = mintFromInput(form().mint); if (mint) await copyText(shareUrl(mint), 'Shareable address link copied'); });
+$('import-token').addEventListener('click', importToken);
+$('back-to-draft').addEventListener('click', () => { state.importSerial++; state.scanSerial++; state.shareMode = false; fields.forEach((id) => { $(id).value = ''; }); $('shared-banner').hidden = true; $('import-status').textContent = 'Optional: load public token labels from DEX Screener after launch.'; $('import-status').className = 'import-status'; $('import-token').textContent = '↘ Load indexed name and ticker'; history.replaceState(null, '', `${location.pathname}#studio`); restore(); render(); $('studio').scrollIntoView({ behavior: 'smooth' }); });
 $('scan-names').addEventListener('click', scanNames);

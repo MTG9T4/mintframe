@@ -4,13 +4,15 @@ MintFrame is a free, browser-based launch studio for Pump.fun creators. It helps
 
 ## What it does
 
-- Live previews and PNG exports for a 1200 × 1200 coin image, 1500 × 500 Pump banner, 1200 × 675 X card, and 1080 × 1920 story.
-- Optional local artwork upload, three color themes, and a single ZIP containing every image plus launch copy and a checklist.
-- Checks for project details, optional link syntax, and custom artwork dimensions against [Pump's creation guidance](https://intercom.help/pumpfun-web/en/articles/11002205-create-a-coin-on-pump-fun).
-- A full-address share card after a Solana mint is created. Address format is checked locally; this does **not** verify ownership or prove a token is safe.
+- Live previews and exports for a 1200 × 1200 PNG coin image, 1500 × 500 JPEG Pump banner, 1200 × 675 PNG X card, and 1080 × 1920 PNG story. Banner output is checked against Pump's 5 MB limit.
+- Optional local artwork upload with drag and keyboard framing, zoom, three color themes, and a single ZIP containing every image plus launch copy and a checklist.
+- Checks for project details, optional website/X/Telegram link syntax, and custom artwork dimensions against [Pump's creation guidance](https://intercom.help/pumpfun-web/en/articles/11002205-create-a-coin-on-pump-fun). These checks are guidance, not Pump approval.
+- Accept a Solana mint or a Pump coin URL; copy the full mint, download an address card, or make a shareable `?mint=` link. The link shows a user-supplied address and does **not** verify ownership or prove a token is safe.
+- Optional import of an indexed name and ticker from [DEX Screener's token-pairs API](https://docs.dexscreener.com/api/reference). The import is a label from an index, not proof of ownership.
+- A one-click X post draft that includes the full mint when available.
 - Optional same-name search through [DEX Screener's public search API](https://docs.dexscreener.com/api/reference). Results are limited to indexed pairs and can lag a new launch.
 
-No account, wallet, backend, or build step is required. Draft text is stored in this browser's local storage. Uploaded artwork stays in the browser and is not saved across reloads. The optional same-name search sends the entered project name or ticker to DEX Screener.
+No account, wallet, backend, or build step is required. Draft text is stored in this browser's local storage. Uploaded artwork stays in the browser and is not saved across reloads. The optional name search sends the entered project name or ticker to DEX Screener. The optional token import sends the entered mint address there.
 
 ## Run locally
 
