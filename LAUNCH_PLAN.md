@@ -13,6 +13,8 @@ Publish the studio and let creators use it without a token. The first proof of d
 
 ## Possible future token
 
+A working token identity is **MintFrame ($MFRAME)**. A DEX Screener search on September 24, 2026 surfaced no exact indexed Solana match for that ticker or name, but indexing is incomplete and this is not a reservation. Repeat checks immediately before any mint.
+
 A token should follow clear usage and a credible role, rather than precede it. Potential roles to validate with users include community votes on new templates or a creator rewards pool, but either would require transparent rules, legal review, and anti-abuse design. A token is **not** needed to use the studio and no market-cap outcome can be predicted or promised.
 
 Before any token launch: verify the project name/ticker collision landscape again, document supply and team holdings, disclose risks and any fees, decide who controls project accounts, and prepare a public launch announcement with the exact mint address. MintFrame itself does not create or trade tokens.
