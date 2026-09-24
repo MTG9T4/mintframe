@@ -321,7 +321,7 @@ function loadArt(file) {
   image.onload = () => {
     state.art = image; state.artInfo = { width: image.width, height: image.height, size: file.size };
     state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-zoom').value = 100; $('zoom-value').textContent = '100%';
-    $('upload-title').textContent = file.name; $('upload-subtitle').textContent = `${image.width} × ${image.height} · ${Math.round(file.size / 1024)} KB`;
+    $('upload-title').textContent = file.name || 'Pasted image'; $('upload-subtitle').textContent = `${image.width} × ${image.height} · ${Math.round(file.size / 1024)} KB`;
     $('remove-art').hidden = false; $('art-framing').hidden = false; $('art-style').hidden = false; render(); URL.revokeObjectURL(url);
     if (Math.min(image.width, image.height) < 1000) toast('Art loaded. A source at least 1000px on its short side will look sharper.');
     else toast('Artwork loaded');
@@ -339,6 +339,11 @@ function launchPost(d) {
   const limit = 280 - suffix.length;
   const short = lead.length <= limit ? lead : `${lead.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
   return short + suffix;
+}
+function imagePrompt(d) {
+  const project = d.name ? ` for a coin project called "${d.name}"` : ' for an original coin project';
+  const idea = d.tagline ? ` The idea is: ${d.tagline.replace(/[.!?]+$/, '')}.` : '';
+  return `Create a striking square profile image${project}.${idea} Show one memorable subject with a bold silhouette, rich lighting, and a polished visual style. Keep the subject centered with breathing room so the image also works in a wide banner crop. Make it recognizable at a tiny avatar size. No words, letters, ticker symbols, logos, watermarks, or interface elements. 1:1 aspect ratio.`;
 }
 async function copyText(value, success) {
   try { await navigator.clipboard.writeText(value); toast(success); }
@@ -441,7 +446,25 @@ $('clean-icon').addEventListener('change', (event) => { state.cleanIcon = event.
 $('reset-look').addEventListener('click', () => { state.flipArt = false; state.cleanIcon = false; setLook('natural'); });
 document.querySelectorAll('.preview-tabs button').forEach((button) => button.addEventListener('click', () => selectOutput(button.dataset.output)));
 $('upload-button').addEventListener('click', () => $('art-upload').click());
-$('art-upload').addEventListener('change', (event) => loadArt(event.target.files[0]));
+$('art-upload').addEventListener('change', (event) => { loadArt(event.target.files[0]); event.target.value = ''; });
+$('copy-image-prompt').addEventListener('click', () => copyText(imagePrompt(form()), 'Image prompt copied'));
+const uploadWrap = $('upload-wrap');
+uploadWrap.addEventListener('dragover', (event) => {
+  if (!Array.from(event.dataTransfer?.types || []).includes('Files')) return;
+  event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; uploadWrap.classList.add('is-dragging');
+});
+uploadWrap.addEventListener('dragleave', (event) => { if (!uploadWrap.contains(event.relatedTarget)) uploadWrap.classList.remove('is-dragging'); });
+uploadWrap.addEventListener('drop', (event) => {
+  uploadWrap.classList.remove('is-dragging');
+  if (!event.dataTransfer?.files.length) return;
+  event.preventDefault(); loadArt(event.dataTransfer.files[0]);
+});
+document.addEventListener('paste', (event) => {
+  if (event.target instanceof Element && event.target.closest('input, textarea, [contenteditable="true"]')) return;
+  const image = Array.from(event.clipboardData?.items || []).filter((item) => item.kind === 'file').map((item) => item.getAsFile()).find((file) => file?.type.startsWith('image/'));
+  if (!image) return;
+  event.preventDefault(); loadArt(image);
+});
 $('remove-art').addEventListener('click', () => { state.art = null; state.artInfo = null; state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-upload').value = ''; $('upload-title').textContent = 'Add your artwork'; $('upload-subtitle').textContent = 'PNG, JPG or WebP · kept on this device'; $('remove-art').hidden = true; $('art-framing').hidden = true; $('art-style').hidden = true; render(); save(); });
 $('art-zoom').addEventListener('input', (event) => { state.artZoom = Number(event.target.value) / 100; $('zoom-value').textContent = `${event.target.value}%`; renderPreview(); save(); });
 $('reset-framing').addEventListener('click', () => { state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-zoom').value = 100; $('zoom-value').textContent = '100%'; renderPreview(); save(); });
