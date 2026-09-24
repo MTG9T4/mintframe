@@ -525,3 +525,38 @@ $('copy-share-link').addEventListener('click', async () => { const mint = mintFr
 $('import-token').addEventListener('click', importToken);
 $('back-to-draft').addEventListener('click', () => { state.importSerial++; state.scanSerial++; state.shareMode = false; fields.forEach((id) => { $(id).value = ''; }); $('shared-banner').hidden = true; $('import-status').textContent = 'Optional: load public token labels from DEX Screener after launch.'; $('import-status').className = 'import-status'; $('import-token').textContent = '↘ Load indexed name and ticker'; history.replaceState(null, '', `${location.pathname}#studio`); restore(); render(); $('studio').scrollIntoView({ behavior: 'smooth' }); });
 $('scan-names').addEventListener('click', scanNames);
+
+const heroArt = document.querySelector('.hero-art');
+$('hero-shuffle').addEventListener('click', () => {
+  const shuffled = heroArt.classList.toggle('shuffled');
+  $('hero-shuffle').setAttribute('aria-pressed', String(shuffled));
+});
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+if (matchMedia('(hover: hover) and (pointer: fine)').matches) {
+  const hero = document.querySelector('.hero');
+  let motionFrame = 0;
+  hero.addEventListener('pointermove', (event) => {
+    if (reducedMotion.matches) return;
+    const rect = hero.getBoundingClientRect();
+    const x = Math.max(-1, Math.min(1, (event.clientX - rect.left) / rect.width * 2 - 1));
+    const y = Math.max(-1, Math.min(1, (event.clientY - rect.top) / rect.height * 2 - 1));
+    cancelAnimationFrame(motionFrame);
+    motionFrame = requestAnimationFrame(() => {
+      for (const [name, value] of Object.entries({ '--front-x': x * 16, '--front-y': y * 12, '--back-x': x * 8, '--back-y': y * 6, '--depth-x': x * 4, '--depth-y': y * 3, '--depth-front-x': x * 10, '--depth-front-y': y * 8 })) {
+        heroArt.style.setProperty(name, `${value.toFixed(1)}px`);
+      }
+    });
+  });
+  hero.addEventListener('pointerleave', () => {
+    cancelAnimationFrame(motionFrame);
+    for (const name of ['--front-x', '--front-y', '--back-x', '--back-y', '--depth-x', '--depth-y', '--depth-front-x', '--depth-front-y']) heroArt.style.removeProperty(name);
+  });
+}
+if (!reducedMotion.matches && 'IntersectionObserver' in window) {
+  const elements = document.querySelectorAll('.section-heading, .kit-bar, .score-card, .check-list, .mint-layout, .collision-panel, .closing h2');
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add('is-visible'); observer.unobserve(entry.target); }
+  }, { threshold: .1, rootMargin: '0px 0px -20px 0px' });
+  elements.forEach((element) => { element.classList.add('motion-reveal'); observer.observe(element); });
+  document.documentElement.classList.add('motion-ready');
+}
