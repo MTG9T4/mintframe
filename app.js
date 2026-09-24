@@ -10,6 +10,7 @@ const looks = { natural: [100, 100, 100], pop: [105, 120, 145], noir: [105, 125,
 const defaultFraming = () => Object.fromEntries(Object.keys(sizes).map((output) => [output, { zoom: 1, x: 0, y: 0 }]));
 const outputNames = { icon: 'coin image', banner: 'Pump banner', social: 'X card', story: 'story' };
 const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, framing: defaultFraming(), brightness: 100, contrast: 100, saturation: 100, look: 'natural', flipArt: false, iconLabel: false, coinStyle: 'art', letterText: '', letterBg: '#c8ff3d', letterInk: '#0a0d12', shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
+let handoffMedia = null, handoffMediaSerial = 0, handoffMediaTimer = null, handoffShareDisabled = false;
 const validHex = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 
 function form() {
@@ -132,7 +133,7 @@ function updateChecks() {
   const checks = [
     ['Name and ticker', !!d.name && !!d.ticker, 'A name and short, recognizable symbol are ready.', true],
     ['Clear description', d.description.length >= 25, 'Recommended: explain the idea in at least one complete sentence.', true],
-    ['Coin image', state.coinStyle === 'letter' || !state.artInfo || Math.min(state.artInfo.width, state.artInfo.height) >= 1000, 'Export is 1200 × 1200. Custom art looks best when its short side is at least 1000px.', true],
+    ['Coin image', state.coinStyle === 'letter' || !state.artInfo || Math.min(state.artInfo.width, state.artInfo.height) >= 1000, state.coinStyle === 'art' && !state.art ? 'The starter spark exports cleanly. Add your own art or choose Bold letter for a distinct coin image.' : 'Export is 1200 × 1200. Custom art looks best when its short side is at least 1000px.', true],
     ['Website link', d.website ? validUrl(d.website) : null, 'Optional. If added, use a complete http:// or https:// link.', false],
     ['X profile', d.social ? validUrl(d.social, true) : null, 'Optional. If added, use a complete x.com profile link.', false],
     ['Telegram', d.telegram ? validTelegram(d.telegram) : null, 'Optional. If added, use a complete t.me link.', false],
@@ -221,6 +222,10 @@ function drawLettermark(ctx, w, h, name) {
   ctx.fillText(letters, w / 2, h / 2 + (ascent - descent) / 2);
   ctx.textAlign = 'start';
 }
+function drawLettermarkBadge(ctx, x, y, size, name) {
+  ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, size, size, size * .09); ctx.clip();
+  ctx.translate(x, y); drawLettermark(ctx, size, size, name); ctx.restore();
+}
 function drawAsset(canvas, output) {
   const [w, h] = sizes[output], d = form(), p = palettes[state.theme]; canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d'); if (output !== 'icon' || state.coinStyle !== 'letter') backdrop(ctx, w, h, p);
@@ -237,12 +242,14 @@ function drawAsset(canvas, output) {
     }
   } else if (output === 'banner') {
     if (state.art) { drawImageCover(ctx, state.art, 830, 0, 670, h, output); ctx.fillStyle = p.base + '44'; ctx.fillRect(830, 0, 670, h); }
+    else if (state.coinStyle === 'letter') drawLettermarkBadge(ctx, 970, 70, 360, name);
     else { star(ctx, 1170, 245, 200, p.accent); }
     frame(ctx, w, h, p, 19); label(ctx, `NEW / ${ticker}`, 56, 70, p.accent, 20);
     fitText(ctx, name, 820, 100, 700, 39); ctx.fillStyle = p.pale; ctx.fillText(name, 52, 280, 820);
     ctx.fillStyle = p.accent; ctx.fillRect(56, 322, 100, 4); label(ctx, tagline.slice(0, 48), 56, 382, p.pale, 21);
   } else if (output === 'social') {
     if (state.art) { drawImageCover(ctx, state.art, 720, 0, 480, h, output); ctx.fillStyle = p.base + '55'; ctx.fillRect(720, 0, 480, h); }
+    else if (state.coinStyle === 'letter') drawLettermarkBadge(ctx, 770, 145, 360, name);
     else star(ctx, 950, 315, 182, p.accent);
     frame(ctx, w, h, p, 28); label(ctx, `INTRODUCING / $${ticker}`, 62, 95, p.accent, 21);
     ctx.font = '700 104px "Space Grotesk", Arial, sans-serif'; const lines = wrapText(ctx, name, 650, 3); fitText(ctx, lines[0] || name, 650, 104, 700, 42);
@@ -250,6 +257,7 @@ function drawAsset(canvas, output) {
     ctx.fillStyle = p.accent; ctx.fillRect(61, 510, 72, 4); label(ctx, tagline.slice(0, 40), 61, 570, p.pale, 19);
   } else {
     if (state.art) { drawImageCover(ctx, state.art, 0, 210, w, 1050, output); ctx.fillStyle = p.base + '33'; ctx.fillRect(0, 210, w, 1050); }
+    else if (state.coinStyle === 'letter') drawLettermarkBadge(ctx, 170, 370, 740, name);
     else { star(ctx, 540, 760, 355, p.accent); }
     frame(ctx, w, h, p, 38); label(ctx, `THE LAUNCH / $${ticker}`, 85, 132, p.accent, 24);
     ctx.fillStyle = p.base + 'dd'; ctx.fillRect(45, 1280, 990, 460);
@@ -293,6 +301,7 @@ function renderPreview() {
       if (serial === state.previewSerial) note.textContent = `${outputDescriptions[output]} · ${(blob.size / 1e6).toFixed(2)} MB`;
     } catch { if (serial === state.previewSerial) note.textContent = 'Export size could not be checked. Try another image.'; }
   }, 300);
+  if (!$('pump-handoff-details').hidden) queueHandoffMedia();
 }
 function render() {
   renderPreview(); drawMint(); updateChecks(); updatePumpHandoff();
@@ -327,6 +336,56 @@ async function downloadPumpAsset(output) {
     download(await assetBlob(canvas, output), assetName(output)); toast(`${output === 'icon' ? 'Coin image' : 'Pump banner'} saved`);
   } catch { toast('Export failed. Please try another image.'); }
 }
+function shareableFile(asset) {
+  try {
+    const file = new File([asset.blob], asset.name, { type: asset.blob.type });
+    return navigator.canShare?.({ files: [file] }) ? file : null;
+  } catch { return null; }
+}
+function queueHandoffMedia() {
+  const serial = ++handoffMediaSerial;
+  handoffMedia = null;
+  clearTimeout(handoffMediaTimer);
+  for (const id of ['save-pump-image', 'save-pump-banner']) $(id).disabled = true;
+  $('handoff-media-status').textContent = 'Preparing your latest images…';
+  handoffMediaTimer = setTimeout(async () => {
+    try {
+      const prepared = {};
+      for (const output of ['icon', 'banner']) {
+        const canvas = document.createElement('canvas'); drawAsset(canvas, output);
+        prepared[output] = { blob: await assetBlob(canvas, output), name: assetName(output) };
+      }
+      if (serial !== handoffMediaSerial || $('pump-handoff-details').hidden) return;
+      handoffMedia = prepared;
+      const canShare = !handoffShareDisabled && !!navigator.share && !!shareableFile(prepared.icon) && !!shareableFile(prepared.banner);
+      $('save-pump-image').textContent = canShare ? '1. Share / save coin image ↗' : '1. Download coin image ↓';
+      $('save-pump-banner').textContent = canShare ? '2. Share / save Pump banner ↗' : '2. Download Pump banner ↓';
+      $('handoff-media-status').textContent = canShare ? 'Your phone’s share sheet may offer Save Image. Downloads work if sharing is unavailable.' : 'Images ready to download. Save them before opening Pump.';
+      for (const id of ['save-pump-image', 'save-pump-banner']) $(id).disabled = false;
+    } catch {
+      if (serial !== handoffMediaSerial) return;
+      $('handoff-media-status').textContent = 'Image preparation failed. Tap a button to try a direct download.';
+      for (const id of ['save-pump-image', 'save-pump-banner']) $(id).disabled = false;
+    }
+  }, 200);
+}
+function shareOrDownloadPumpAsset(output) {
+  const asset = handoffMedia?.[output];
+  if (!asset) { downloadPumpAsset(output); return; }
+  const file = !handoffShareDisabled && navigator.share && shareableFile(asset);
+  if (!file) { download(asset.blob, asset.name); toast('Image downloaded'); return; }
+  // The file is already a Blob; call share during the tap's user activation.
+  const fallback = (error) => {
+    if (error?.name === 'AbortError') return;
+    handoffShareDisabled = true;
+    $('save-pump-image').textContent = '1. Download coin image ↓';
+    $('save-pump-banner').textContent = '2. Download Pump banner ↓';
+    $('handoff-media-status').textContent = 'Sharing is unavailable here. Tap either button again to download.';
+    toast('Sharing unavailable. Tap again to download.');
+  };
+  try { navigator.share({ files: [file], title: asset.name }).catch(fallback); }
+  catch (error) { fallback(error); }
+}
 function pumpDescription(d) {
   const idea = d.tagline.trim(), description = d.description.trim();
   return idea && description && !description.toLowerCase().includes(idea.toLowerCase()) ? `${idea}\n\n${description}` : description || idea;
@@ -343,6 +402,11 @@ function pumpSummary(d) {
 }
 function updatePumpHandoff() {
   const values = pumpFields(form());
+  const length = values.description.length, over = length > 500;
+  $('pump-copy-length').textContent = `Combined Pump copy: ${length}/500 suggested characters${over ? '. Shorten the idea or description before pasting.' : '.'}`;
+  $('pump-copy-length').classList.toggle('warning', over);
+  $('handoff-copy-length').hidden = !over;
+  $('handoff-copy-length').textContent = over ? `Your combined description is ${length} characters. Review its length in Pump before creating the coin.` : '';
   document.querySelectorAll('[data-pump-field]').forEach((row) => {
     const value = values[row.dataset.pumpField];
     row.hidden = !value;
@@ -498,6 +562,7 @@ try {
   if (!state.shareMode && sessionStorage.getItem('mintframe-pump-handoff-open') === '1') {
     $('pump-handoff-details').hidden = false;
     $('prepare-pump').setAttribute('aria-expanded', 'true');
+    queueHandoffMedia();
   }
 } catch { /* Handoff state is optional in restricted browser modes. */ }
 if (document.fonts?.ready) document.fonts.ready.then(render);
@@ -595,17 +660,22 @@ $('prepare-pump').addEventListener('click', async () => {
   try { if (open) sessionStorage.setItem('mintframe-pump-handoff-open', '1'); else sessionStorage.removeItem('mintframe-pump-handoff-open'); }
   catch { /* Handoff state is optional in restricted browser modes. */ }
   if (open) {
+    queueHandoffMedia();
     updatePumpHandoff(); details.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
     const copied = await copyText(pumpSummary(d), 'All coin details copied');
     $('handoff-copy-status').textContent = copied ? 'Details copied as one note. Use the field buttons below to paste one field at a time.' : 'Clipboard access failed. Use the field buttons below or select the text manually.';
-  }
+  } else { handoffMediaSerial++; handoffMedia = null; clearTimeout(handoffMediaTimer); }
 });
 $('copy-pump-details').addEventListener('click', async () => {
   const copied = await copyText(pumpSummary(form()), 'All coin details copied');
   $('handoff-copy-status').textContent = copied ? 'Details copied as one note. Use the field buttons below to paste one field at a time.' : 'Clipboard access failed. Use the field buttons below or select the text manually.';
 });
-$('save-pump-image').addEventListener('click', () => downloadPumpAsset('icon'));
-$('save-pump-banner').addEventListener('click', () => downloadPumpAsset('banner'));
+$('save-pump-image').addEventListener('click', () => shareOrDownloadPumpAsset('icon'));
+$('save-pump-banner').addEventListener('click', () => shareOrDownloadPumpAsset('banner'));
+$('return-with-mint').addEventListener('click', () => {
+  $('identity').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  $('mint-address').focus({ preventScroll: true });
+});
 document.querySelectorAll('[data-pump-field]').forEach((row) => row.querySelector('button').addEventListener('click', () => {
   const value = pumpFields(form())[row.dataset.pumpField];
   if (value) copyText(value, `${row.querySelector('span').textContent} copied`);
