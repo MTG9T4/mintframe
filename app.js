@@ -6,7 +6,8 @@ const palettes = {
   ember: { base: '#21141b', mid: '#613027', glow: '#b45535', accent: '#ff8559', pale: '#fff0e3', dim: '#d1a190' },
   chrome: { base: '#101921', mid: '#315066', glow: '#678da8', accent: '#b8deef', pale: '#eefaff', dim: '#a0baca' }
 };
-const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, artZoom: 1, artX: 0, artY: 0, shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
+const looks = { natural: [100, 100, 100], pop: [105, 120, 145], noir: [105, 125, 0], soft: [108, 86, 88] };
+const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, artZoom: 1, artX: 0, artY: 0, brightness: 100, contrast: 100, saturation: 100, look: 'natural', flipArt: false, cleanIcon: false, shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
 
 function form() {
   return {
@@ -17,7 +18,7 @@ function form() {
 }
 function save() {
   if (state.shareMode) return;
-  try { localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...form(), theme: state.theme, artZoom: state.artZoom, artX: state.artX, artY: state.artY })); }
+  try { localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...form(), theme: state.theme, artZoom: state.artZoom, artX: state.artX, artY: state.artY, brightness: state.brightness, contrast: state.contrast, saturation: state.saturation, look: state.look, flipArt: state.flipArt, cleanIcon: state.cleanIcon })); }
   catch { /* Draft saving is optional in restricted browser modes. */ }
 }
 function restore() {
@@ -28,9 +29,30 @@ function restore() {
     state.artZoom = Number.isFinite(draft.artZoom) ? Math.min(2.2, Math.max(1, draft.artZoom)) : 1;
     state.artX = Number.isFinite(draft.artX) ? Math.min(1, Math.max(-1, draft.artX)) : 0;
     state.artY = Number.isFinite(draft.artY) ? Math.min(1, Math.max(-1, draft.artY)) : 0;
+    state.brightness = Number.isFinite(draft.brightness) ? Math.min(150, Math.max(50, draft.brightness)) : 100;
+    state.contrast = Number.isFinite(draft.contrast) ? Math.min(150, Math.max(50, draft.contrast)) : 100;
+    state.saturation = Number.isFinite(draft.saturation) ? Math.min(200, Math.max(0, draft.saturation)) : 100;
+    state.look = Object.hasOwn(looks, draft.look) || draft.look === 'custom' ? draft.look : 'natural';
+    state.flipArt = draft.flipArt === true; state.cleanIcon = draft.cleanIcon === true;
     $('art-zoom').value = Math.round(state.artZoom * 100); $('zoom-value').textContent = `${Math.round(state.artZoom * 100)}%`;
+    syncArtControls();
     if (palettes[draft.theme]) setTheme(draft.theme, false);
   } catch { /* A corrupted local draft should not prevent the studio from opening. */ }
+}
+function syncArtControls() {
+  for (const key of ['brightness', 'contrast', 'saturation']) {
+    $(`art-${key}`).value = state[key]; $(`${key}-value`).textContent = `${state[key]}%`;
+  }
+  $('flip-art').checked = state.flipArt; $('clean-icon').checked = state.cleanIcon;
+  document.querySelectorAll('.look').forEach((button) => {
+    const active = button.dataset.look === state.look;
+    button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
+  });
+}
+function setLook(look) {
+  if (!looks[look]) return;
+  [state.brightness, state.contrast, state.saturation] = looks[look];
+  state.look = look; syncArtControls(); render(); save();
 }
 function setTheme(theme, shouldSave = true) {
   state.theme = theme;
@@ -143,6 +165,8 @@ function drawImageCover(ctx, image, x, y, w, h, radius = 0) {
   const dy = y + (h - ih) / 2 + state.artY * Math.max(0, (ih - h) / 2);
   ctx.save(); if (radius) { ctx.beginPath(); ctx.roundRect(x, y, w, h, radius); ctx.clip(); }
   else { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); }
+  ctx.filter = `brightness(${state.brightness}%) contrast(${state.contrast}%) saturate(${state.saturation}%)`;
+  if (state.flipArt) { ctx.translate(2 * x + w, 0); ctx.scale(-1, 1); }
   ctx.drawImage(image, dx, dy, iw, ih); ctx.restore();
 }
 function star(ctx, x, y, radius, color) {
@@ -156,6 +180,7 @@ function drawAsset(canvas, output) {
   const [w, h] = sizes[output], d = form(), p = palettes[state.theme]; canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d'); backdrop(ctx, w, h, p);
   const name = (d.name || 'YOUR IDEA').toUpperCase(), ticker = (d.ticker || 'TICKER').toUpperCase(), tagline = (d.tagline || 'MAKE IT LAND.').toUpperCase();
+  if (output === 'icon' && state.art && state.cleanIcon) { drawImageCover(ctx, state.art, 0, 0, w, h); return; }
   if (output === 'icon') {
     if (state.art) {
       drawImageCover(ctx, state.art, 0, 0, w, h);
@@ -210,8 +235,12 @@ const outputDescriptions = {
   social: 'Landscape PNG · made for a social post',
   story: 'Vertical PNG · made for a story'
 };
+const avatarSourceCanvas = document.createElement('canvas');
 function renderPreview() {
   drawAsset($('preview'), state.output);
+  const avatarSource = state.output === 'icon' ? $('preview') : avatarSourceCanvas;
+  if (state.output !== 'icon') drawAsset(avatarSourceCanvas, 'icon');
+  const avatar = $('avatar-preview').getContext('2d'); avatar.clearRect(0, 0, 72, 72); avatar.drawImage(avatarSource, 0, 0, 72, 72);
   const output = state.output, serial = ++state.previewSerial, note = $('output-note');
   note.textContent = `${outputDescriptions[output]} · measuring…`;
   clearTimeout(state.previewTimer);
@@ -293,7 +322,7 @@ function loadArt(file) {
     state.art = image; state.artInfo = { width: image.width, height: image.height, size: file.size };
     state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-zoom').value = 100; $('zoom-value').textContent = '100%';
     $('upload-title').textContent = file.name; $('upload-subtitle').textContent = `${image.width} × ${image.height} · ${Math.round(file.size / 1024)} KB`;
-    $('remove-art').hidden = false; $('art-framing').hidden = false; render(); URL.revokeObjectURL(url);
+    $('remove-art').hidden = false; $('art-framing').hidden = false; $('art-style').hidden = false; render(); URL.revokeObjectURL(url);
     if (Math.min(image.width, image.height) < 1000) toast('Art loaded. A source at least 1000px on its short side will look sharper.');
     else toast('Artwork loaded');
   };
@@ -401,10 +430,19 @@ fields.forEach((id) => $(id).addEventListener('input', () => {
   save(); render(); if (['coin-name', 'ticker', 'mint-address'].includes(id)) { state.scanSerial++; $('scan-names').disabled = false; $('scan-names').textContent = 'Search possible matches ↗'; $('collision-results').replaceChildren(); }
 }));
 document.querySelectorAll('.theme').forEach((button) => button.addEventListener('click', () => setTheme(button.dataset.theme)));
+document.querySelectorAll('.look').forEach((button) => button.addEventListener('click', () => setLook(button.dataset.look)));
+for (const key of ['brightness', 'contrast', 'saturation']) {
+  $(`art-${key}`).addEventListener('input', (event) => {
+    state[key] = Number(event.target.value); state.look = 'custom'; syncArtControls(); renderPreview(); save();
+  });
+}
+$('flip-art').addEventListener('change', (event) => { state.flipArt = event.target.checked; renderPreview(); save(); });
+$('clean-icon').addEventListener('change', (event) => { state.cleanIcon = event.target.checked; renderPreview(); save(); });
+$('reset-look').addEventListener('click', () => { state.flipArt = false; state.cleanIcon = false; setLook('natural'); });
 document.querySelectorAll('.preview-tabs button').forEach((button) => button.addEventListener('click', () => selectOutput(button.dataset.output)));
 $('upload-button').addEventListener('click', () => $('art-upload').click());
 $('art-upload').addEventListener('change', (event) => loadArt(event.target.files[0]));
-$('remove-art').addEventListener('click', () => { state.art = null; state.artInfo = null; state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-upload').value = ''; $('upload-title').textContent = 'Add your artwork'; $('upload-subtitle').textContent = 'PNG, JPG or WebP · kept on this device'; $('remove-art').hidden = true; $('art-framing').hidden = true; render(); save(); });
+$('remove-art').addEventListener('click', () => { state.art = null; state.artInfo = null; state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-upload').value = ''; $('upload-title').textContent = 'Add your artwork'; $('upload-subtitle').textContent = 'PNG, JPG or WebP · kept on this device'; $('remove-art').hidden = true; $('art-framing').hidden = true; $('art-style').hidden = true; render(); save(); });
 $('art-zoom').addEventListener('input', (event) => { state.artZoom = Number(event.target.value) / 100; $('zoom-value').textContent = `${event.target.value}%`; renderPreview(); save(); });
 $('reset-framing').addEventListener('click', () => { state.artZoom = 1; state.artX = 0; state.artY = 0; $('art-zoom').value = 100; $('zoom-value').textContent = '100%'; renderPreview(); save(); });
 const previewCanvas = $('preview'); let drag = null;
