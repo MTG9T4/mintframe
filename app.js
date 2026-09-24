@@ -9,7 +9,8 @@ const palettes = {
 const looks = { natural: [100, 100, 100], pop: [105, 120, 145], noir: [105, 125, 0], soft: [108, 86, 88] };
 const defaultFraming = () => Object.fromEntries(Object.keys(sizes).map((output) => [output, { zoom: 1, x: 0, y: 0 }]));
 const outputNames = { icon: 'coin image', banner: 'Pump banner', social: 'X card', story: 'story' };
-const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, framing: defaultFraming(), brightness: 100, contrast: 100, saturation: 100, look: 'natural', flipArt: false, iconLabel: false, shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
+const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, framing: defaultFraming(), brightness: 100, contrast: 100, saturation: 100, look: 'natural', flipArt: false, iconLabel: false, coinStyle: 'art', letterText: '', letterBg: '#c8ff3d', letterInk: '#0a0d12', shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
+const validHex = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 
 function form() {
   return {
@@ -20,7 +21,7 @@ function form() {
 }
 function save() {
   if (state.shareMode) return;
-  try { localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...form(), theme: state.theme, framing: state.framing, brightness: state.brightness, contrast: state.contrast, saturation: state.saturation, look: state.look, flipArt: state.flipArt, iconLabel: state.iconLabel })); }
+  try { localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...form(), theme: state.theme, framing: state.framing, brightness: state.brightness, contrast: state.contrast, saturation: state.saturation, look: state.look, flipArt: state.flipArt, iconLabel: state.iconLabel, coinStyle: state.coinStyle, letterText: state.letterText, letterBg: state.letterBg, letterInk: state.letterInk })); }
   catch { /* Draft saving is optional in restricted browser modes. */ }
 }
 function restore() {
@@ -42,8 +43,13 @@ function restore() {
     state.saturation = Number.isFinite(draft.saturation) ? Math.min(200, Math.max(0, draft.saturation)) : 100;
     state.look = Object.hasOwn(looks, draft.look) || draft.look === 'custom' ? draft.look : 'natural';
     state.flipArt = draft.flipArt === true; state.iconLabel = draft.iconLabel === true;
+    state.coinStyle = draft.coinStyle === 'letter' ? 'letter' : 'art';
+    state.letterText = typeof draft.letterText === 'string' ? draft.letterText.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 2) : '';
+    state.letterBg = validHex(draft.letterBg) ? draft.letterBg : '#c8ff3d';
+    state.letterInk = validHex(draft.letterInk) ? draft.letterInk : '#0a0d12';
     syncFramingControls();
     syncArtControls();
+    syncCoinStyle();
     if (palettes[draft.theme]) setTheme(draft.theme, false);
   } catch { /* A corrupted local draft should not prevent the studio from opening. */ }
 }
@@ -62,6 +68,16 @@ function syncArtControls() {
     const active = button.dataset.look === state.look;
     button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
   });
+}
+function syncCoinStyle() {
+  document.querySelectorAll('[data-coin-style]').forEach((button) => {
+    const active = button.dataset.coinStyle === state.coinStyle;
+    button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
+  });
+  $('letter-controls').hidden = state.coinStyle !== 'letter';
+  $('letter-text').value = state.letterText;
+  $('letter-bg').value = state.letterBg;
+  $('letter-ink').value = state.letterInk;
 }
 function setLook(look) {
   if (!looks[look]) return;
@@ -116,7 +132,7 @@ function updateChecks() {
   const checks = [
     ['Name and ticker', !!d.name && !!d.ticker, 'A name and short, recognizable symbol are ready.', true],
     ['Clear description', d.description.length >= 25, 'Recommended: explain the idea in at least one complete sentence.', true],
-    ['Coin image', !state.artInfo || Math.min(state.artInfo.width, state.artInfo.height) >= 1000, 'Export is 1200 × 1200. Custom art looks best when its short side is at least 1000px.', true],
+    ['Coin image', state.coinStyle === 'letter' || !state.artInfo || Math.min(state.artInfo.width, state.artInfo.height) >= 1000, 'Export is 1200 × 1200. Custom art looks best when its short side is at least 1000px.', true],
     ['Website link', d.website ? validUrl(d.website) : null, 'Optional. If added, use a complete http:// or https:// link.', false],
     ['X profile', d.social ? validUrl(d.social, true) : null, 'Optional. If added, use a complete x.com profile link.', false],
     ['Telegram', d.telegram ? validTelegram(d.telegram) : null, 'Optional. If added, use a complete t.me link.', false],
@@ -194,12 +210,25 @@ function star(ctx, x, y, radius, color) {
 }
 function frame(ctx, w, h, p, margin) { ctx.strokeStyle = p.accent + 'a6'; ctx.lineWidth = Math.max(2, w / 500); ctx.strokeRect(margin, margin, w - margin * 2, h - margin * 2); }
 function label(ctx, text, x, y, color, size = 22) { ctx.fillStyle = color; ctx.font = `500 ${size}px "DM Mono", monospace`; ctx.fillText(text, x, y); }
+function drawLettermark(ctx, w, h, name) {
+  ctx.fillStyle = state.letterBg; ctx.fillRect(0, 0, w, h);
+  const letters = state.letterText || name.match(/[A-Z0-9]/)?.[0] || 'M';
+  fitText(ctx, letters, w * .7, letters.length === 1 ? w * .7 : w * .58, 700, w * .3);
+  const metrics = ctx.measureText(letters);
+  const ascent = Number.isFinite(metrics.actualBoundingBoxAscent) ? metrics.actualBoundingBoxAscent : w * .5;
+  const descent = Number.isFinite(metrics.actualBoundingBoxDescent) ? metrics.actualBoundingBoxDescent : 0;
+  ctx.fillStyle = state.letterInk; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(letters, w / 2, h / 2 + (ascent - descent) / 2);
+  ctx.textAlign = 'start';
+}
 function drawAsset(canvas, output) {
   const [w, h] = sizes[output], d = form(), p = palettes[state.theme]; canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d'); backdrop(ctx, w, h, p);
+  const ctx = canvas.getContext('2d'); if (output !== 'icon' || state.coinStyle !== 'letter') backdrop(ctx, w, h, p);
   const name = (d.name || 'YOUR IDEA').toUpperCase(), ticker = (d.ticker || 'TICKER').toUpperCase(), tagline = (d.tagline || 'MAKE IT LAND.').toUpperCase();
   if (output === 'icon') {
-    if (state.art) {
+    if (state.coinStyle === 'letter') {
+      drawLettermark(ctx, w, h, name);
+    } else if (state.art) {
       drawImageCover(ctx, state.art, 0, 0, w, h, output);
     } else { ctx.save(); ctx.shadowColor = p.accent; ctx.shadowBlur = 110; star(ctx, 600, 600, 360, p.accent); ctx.restore(); star(ctx, 600, 600, 360, p.accent); }
     if (state.iconLabel && d.name) {
@@ -267,7 +296,7 @@ function renderPreview() {
 }
 function render() {
   renderPreview(); drawMint(); updateChecks(); updatePumpHandoff();
-  $('preview').parentElement.classList.toggle('has-art', !!state.art);
+  $('preview').parentElement.classList.toggle('has-art', !!state.art && !(state.output === 'icon' && state.coinStyle === 'letter'));
 }
 function selectOutput(output) {
   state.output = output;
@@ -484,6 +513,16 @@ fields.forEach((id) => $(id).addEventListener('input', () => {
   save(); render(); updateOptionalCount(); if (['coin-name', 'ticker', 'mint-address'].includes(id)) { state.scanSerial++; $('scan-names').disabled = false; $('scan-names').textContent = 'Search possible matches ↗'; $('collision-results').replaceChildren(); }
 }));
 document.querySelectorAll('.theme').forEach((button) => button.addEventListener('click', () => setTheme(button.dataset.theme)));
+document.querySelectorAll('[data-coin-style]').forEach((button) => button.addEventListener('click', () => {
+  state.coinStyle = button.dataset.coinStyle; syncCoinStyle(); render(); save();
+}));
+$('letter-text').addEventListener('input', (event) => {
+  state.letterText = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 2);
+  event.target.value = state.letterText; render(); save();
+});
+for (const [id, key] of [['letter-bg', 'letterBg'], ['letter-ink', 'letterInk']]) {
+  $(id).addEventListener('input', (event) => { if (!validHex(event.target.value)) return; state[key] = event.target.value; render(); save(); });
+}
 document.querySelectorAll('.look').forEach((button) => button.addEventListener('click', () => setLook(button.dataset.look)));
 for (const key of ['brightness', 'contrast', 'saturation']) {
   $(`art-${key}`).addEventListener('input', (event) => {
@@ -519,7 +558,7 @@ $('art-zoom').addEventListener('input', (event) => { state.framing[state.output]
 $('reset-framing').addEventListener('click', () => { state.framing[state.output] = { zoom: 1, x: 0, y: 0 }; syncFramingControls(); renderPreview(); save(); });
 const previewCanvas = $('preview'); let drag = null;
 previewCanvas.addEventListener('pointerdown', (event) => {
-  if (!state.art) return;
+  if (!state.art || (state.output === 'icon' && state.coinStyle === 'letter')) return;
   const frame = state.framing[state.output];
   drag = { x: event.clientX, y: event.clientY, frameX: frame.x, frameY: frame.y, output: state.output };
   previewCanvas.setPointerCapture(event.pointerId); previewCanvas.classList.add('dragging');
@@ -537,7 +576,7 @@ previewCanvas.addEventListener('pointermove', (event) => {
 function endDrag() { if (!drag) return; drag = null; previewCanvas.classList.remove('dragging'); save(); }
 previewCanvas.addEventListener('pointerup', endDrag); previewCanvas.addEventListener('pointercancel', endDrag);
 previewCanvas.addEventListener('keydown', (event) => {
-  if (!state.art || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+  if (!state.art || (state.output === 'icon' && state.coinStyle === 'letter') || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
   event.preventDefault(); const step = event.shiftKey ? .15 : .05;
   const frame = state.framing[state.output];
   if (event.key === 'ArrowLeft') frame.x = Math.max(-1, frame.x - step);
