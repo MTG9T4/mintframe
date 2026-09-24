@@ -100,21 +100,24 @@ function mintFromInput(raw) {
 function updateChecks() {
   const d = form();
   const checks = [
-    ['Name and ticker', !!d.name && !!d.ticker, 'A name and short, recognizable symbol are ready.'],
-    ['Clear description', d.description.length >= 25, 'Recommended: explain the idea in at least one complete sentence.'],
-    ['Coin image', !state.artInfo || Math.min(state.artInfo.width, state.artInfo.height) >= 1000, 'Export is 1200 × 1200. Custom art looks best when its short side is at least 1000px.'],
-    ['Website link', !d.website || validUrl(d.website), 'Optional. If added, use a complete http:// or https:// link.'],
-    ['X profile', !d.social || validUrl(d.social, true), 'Optional. If added, use a complete x.com profile link.'],
-    ['Telegram', !d.telegram || validTelegram(d.telegram), 'Optional. If added, use a complete t.me link.'],
-    ['Launch assets', !!d.name && !!d.ticker && !!d.tagline, 'Your name, ticker and one-line idea populate every export.']
+    ['Name and ticker', !!d.name && !!d.ticker, 'A name and short, recognizable symbol are ready.', true],
+    ['Clear description', d.description.length >= 25, 'Recommended: explain the idea in at least one complete sentence.', true],
+    ['Coin image', !state.artInfo || Math.min(state.artInfo.width, state.artInfo.height) >= 1000, 'Export is 1200 × 1200. Custom art looks best when its short side is at least 1000px.', true],
+    ['Website link', d.website ? validUrl(d.website) : null, 'Optional. If added, use a complete http:// or https:// link.', false],
+    ['X profile', d.social ? validUrl(d.social, true) : null, 'Optional. If added, use a complete x.com profile link.', false],
+    ['Telegram', d.telegram ? validTelegram(d.telegram) : null, 'Optional. If added, use a complete t.me link.', false],
+    ['Launch assets', !!d.name && !!d.ticker && !!d.tagline, 'Your name, ticker and one-line idea populate every export.', true]
   ];
-  const score = checks.filter((check) => check[1]).length;
-  $('readiness-score').textContent = `${score}/${checks.length}`;
-  $('score-fill').style.width = `${100 * score / checks.length}%`;
-  $('readiness-summary').textContent = score === checks.length ? 'Ready for a careful final review on Pump.' : `${checks.length - score} item${checks.length - score === 1 ? '' : 's'} to review before opening Pump.`;
+  const core = checks.filter((check) => check[3]);
+  const score = core.filter((check) => check[1]).length;
+  const invalidLinks = checks.filter((check) => !check[3] && check[1] === false).length;
+  $('readiness-score').textContent = `${score}/${core.length}`;
+  $('score-fill').style.width = `${100 * score / core.length}%`;
+  const issues = core.length - score + invalidLinks;
+  $('readiness-summary').textContent = issues ? `${issues} item${issues === 1 ? '' : 's'} to review before opening Pump.` : 'Ready for a careful final review on Pump.';
   $('check-list').replaceChildren(...checks.map(([title, good, detail]) => {
-    const item = document.createElement('div'); item.className = `check-item ${good ? 'good' : ''}`;
-    const icon = document.createElement('span'); icon.className = 'check-icon'; icon.textContent = good ? '✓' : '·';
+    const item = document.createElement('div'); item.className = `check-item ${good === true ? 'good' : ''}`;
+    const icon = document.createElement('span'); icon.className = 'check-icon'; icon.textContent = good === true ? '✓' : good === null ? '–' : '·';
     const content = document.createElement('div'); const heading = document.createElement('strong'); heading.textContent = title;
     const p = document.createElement('p'); p.textContent = detail; content.append(heading, p); item.append(icon, content); return item;
   }));
@@ -390,7 +393,7 @@ async function scanNames() {
   try {
     const queries = [...new Set([d.name, d.ticker].filter(Boolean))];
     const responses = await Promise.all(queries.map(async (term) => {
-      const response = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(term)}`);
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(term)}`, { signal: AbortSignal.timeout(12000) });
       if (!response.ok) throw new Error(`Search unavailable (${response.status})`);
       return response.json();
     }));
@@ -413,7 +416,7 @@ async function scanNames() {
       const card = document.createElement('div'); card.className = 'collision-item';
       const title = document.createElement('strong'); title.textContent = `${token.name || 'Unnamed'} · $${token.symbol || '?'}`;
       const address = document.createElement('code'); address.textContent = token.address;
-      const note = document.createElement('span'); note.textContent = validMint(d.mint) && token.address === d.mint ? 'Matches the address you entered' : 'Different address or no address entered';
+      const note = document.createElement('span'); note.textContent = token.address === mintFromInput(d.mint) ? 'Matches the address you entered' : 'Different address or no address entered';
       const link = document.createElement('a'); link.href = `https://dexscreener.com/solana/${token.address}`; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Inspect on DEX Screener ↗';
       card.append(title, address, note, link); cards.append(card);
     }
