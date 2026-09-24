@@ -9,7 +9,7 @@ const palettes = {
 const looks = { natural: [100, 100, 100], pop: [105, 120, 145], noir: [105, 125, 0], soft: [108, 86, 88] };
 const defaultFraming = () => Object.fromEntries(Object.keys(sizes).map((output) => [output, { zoom: 1, x: 0, y: 0 }]));
 const outputNames = { icon: 'coin image', banner: 'Pump banner', social: 'X card', story: 'story' };
-const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, framing: defaultFraming(), brightness: 100, contrast: 100, saturation: 100, look: 'natural', flipArt: false, iconLabel: false, coinStyle: 'art', letterText: '', letterBg: '#c8ff3d', letterInk: '#0a0d12', shareMode: false, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
+const state = { output: 'icon', theme: 'electric', art: null, artInfo: null, framing: defaultFraming(), brightness: 100, contrast: 100, saturation: 100, look: 'natural', flipArt: false, iconLabel: false, coinStyle: 'art', letterText: '', letterBg: '#c8ff3d', letterInk: '#0a0d12', shareMode: false, sampleBackup: null, importSerial: 0, scanSerial: 0, previewSerial: 0, previewTimer: null, toastTimer: null };
 let handoffMedia = null, handoffMediaSerial = 0, handoffMediaTimer = null, handoffShareDisabled = false;
 const validHex = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 
@@ -21,7 +21,7 @@ function form() {
   };
 }
 function save() {
-  if (state.shareMode) return;
+  if (state.shareMode || state.sampleBackup) return;
   try { localStorage.setItem('mintframe-draft-v1', JSON.stringify({ ...form(), theme: state.theme, framing: state.framing, brightness: state.brightness, contrast: state.contrast, saturation: state.saturation, look: state.look, flipArt: state.flipArt, iconLabel: state.iconLabel, coinStyle: state.coinStyle, letterText: state.letterText, letterBg: state.letterBg, letterInk: state.letterInk })); }
   catch { /* Draft saving is optional in restricted browser modes. */ }
 }
@@ -79,6 +79,47 @@ function syncCoinStyle() {
   $('letter-text').value = state.letterText;
   $('letter-bg').value = state.letterBg;
   $('letter-ink').value = state.letterInk;
+}
+function syncArtworkUI(title, subtitle) {
+  $('upload-title').textContent = title;
+  $('upload-subtitle').textContent = subtitle;
+  $('remove-art').hidden = !state.art;
+  $('art-framing').hidden = !state.art;
+  $('art-style').hidden = !state.art;
+  $('art-memory-note').hidden = !state.art;
+}
+function toggleSample() {
+  if (state.sampleBackup) {
+    const backup = state.sampleBackup;
+    fields.forEach((id) => { $(id).value = backup.fields[id]; });
+    for (const key of ['theme', 'art', 'artInfo', 'framing', 'brightness', 'contrast', 'saturation', 'look', 'flipArt', 'iconLabel', 'coinStyle', 'letterText', 'letterBg', 'letterInk']) state[key] = backup[key];
+    state.sampleBackup = null;
+    syncArtworkUI(backup.uploadTitle, backup.uploadSubtitle);
+    syncArtControls(); syncCoinStyle(); setTheme(state.theme, false); selectOutput(backup.output); updateOptionalCount();
+    $('load-sample').textContent = 'Try a sample ↗'; $('sample-status').hidden = true;
+    toast('Your draft is back');
+    return;
+  }
+  state.sampleBackup = {
+    fields: Object.fromEntries(fields.map((id) => [id, $(id).value])),
+    output: state.output, theme: state.theme, art: state.art, artInfo: state.artInfo,
+    framing: Object.fromEntries(Object.entries(state.framing).map(([key, value]) => [key, { ...value }])),
+    brightness: state.brightness, contrast: state.contrast, saturation: state.saturation, look: state.look,
+    flipArt: state.flipArt, iconLabel: state.iconLabel, coinStyle: state.coinStyle,
+    letterText: state.letterText, letterBg: state.letterBg, letterInk: state.letterInk,
+    uploadTitle: $('upload-title').textContent, uploadSubtitle: $('upload-subtitle').textContent
+  };
+  $('coin-name').value = 'Good Signal'; $('ticker').value = 'SIGNAL';
+  $('tagline').value = 'The launch desk for loud ideas';
+  $('description').value = 'A sample project to preview exports. Replace with your own copy.';
+  $('website').value = ''; $('social').value = ''; $('telegram').value = ''; $('mint-address').value = '';
+  state.art = null; state.artInfo = null; state.framing = defaultFraming(); state.coinStyle = 'letter';
+  state.letterText = 'GS'; state.letterBg = '#c8ff3d'; state.letterInk = '#0a0d12'; state.iconLabel = false;
+  state.brightness = 100; state.contrast = 100; state.saturation = 100; state.look = 'natural'; state.flipArt = false;
+  syncArtworkUI('Add your artwork', 'PNG, JPG or WebP · kept on this device');
+  syncArtControls(); syncCoinStyle(); setTheme('electric', false); selectOutput('icon'); updateOptionalCount();
+  $('load-sample').textContent = 'Clear sample ↶'; $('sample-status').hidden = false;
+  toast('Sample loaded. Explore the previews, then make it yours.');
 }
 function setLook(look) {
   if (!looks[look]) return;
@@ -146,6 +187,7 @@ function updateChecks() {
   $('score-fill').style.width = `${100 * score / core.length}%`;
   const issues = core.length - score + invalidLinks;
   $('readiness-summary').textContent = issues ? `${issues} item${issues === 1 ? '' : 's'} to review before opening Pump.` : 'Ready for a careful final review on Pump.';
+  $('preflight-scan-link').hidden = !d.name && !d.ticker;
   $('check-list').replaceChildren(...checks.map(([title, good, detail]) => {
     const item = document.createElement('div'); item.className = `check-item ${good === true ? 'good' : ''}`;
     const icon = document.createElement('span'); icon.className = 'check-icon'; icon.textContent = good === true ? '✓' : good === null ? '–' : '·';
@@ -285,6 +327,16 @@ const outputDescriptions = {
   social: 'Landscape PNG · made for an X card',
   story: 'Vertical PNG · made for a story'
 };
+const taglineLimits = { banner: 48, social: 40, story: 38 };
+function updateTruncationNotes() {
+  const length = form().tagline.length;
+  const cut = Object.entries(taglineLimits).filter(([, limit]) => length > limit).map(([output]) => outputNames[output]);
+  const note = $('tagline-trim-note'); note.hidden = !cut.length;
+  note.textContent = cut.length ? `Your one-line idea is cut on ${cut.join(', ')}. Keep it to 38 characters to show it in full everywhere.` : '';
+  const previewNote = $('preview-trim-note'), limit = taglineLimits[state.output];
+  previewNote.hidden = !limit || length <= limit;
+  previewNote.textContent = !previewNote.hidden ? `This ${outputNames[state.output]} shows only the first ${limit} characters of your one-line idea.` : '';
+}
 const avatarSourceCanvas = document.createElement('canvas');
 function renderPreview() {
   drawAsset($('preview'), state.output);
@@ -292,6 +344,7 @@ function renderPreview() {
   if (state.output !== 'icon') drawAsset(avatarSourceCanvas, 'icon');
   const avatar = $('avatar-preview').getContext('2d'); avatar.clearRect(0, 0, 72, 72); avatar.drawImage(avatarSource, 0, 0, 72, 72);
   drawMobilePreview(avatarSource);
+  updateTruncationNotes();
   const output = state.output, serial = ++state.previewSerial, note = $('output-note');
   note.textContent = `${outputDescriptions[output]} · measuring…`;
   clearTimeout(state.previewTimer);
@@ -457,8 +510,8 @@ function loadArt(file) {
   image.onload = () => {
     state.art = image; state.artInfo = { width: image.width, height: image.height, size: file.size };
     state.framing = defaultFraming(); syncFramingControls();
-    $('upload-title').textContent = file.name || 'Pasted image'; $('upload-subtitle').textContent = `${image.width} × ${image.height} · ${Math.round(file.size / 1024)} KB`;
-    $('remove-art').hidden = false; $('art-framing').hidden = false; $('art-style').hidden = false; render(); URL.revokeObjectURL(url);
+    syncArtworkUI(file.name || 'Pasted image', `${image.width} × ${image.height} · ${Math.round(file.size / 1024)} KB`);
+    render(); URL.revokeObjectURL(url);
     if (Math.min(image.width, image.height) < 1000) toast('Art loaded. A source at least 1000px on its short side will look sharper.');
     else toast('Artwork loaded');
   };
@@ -598,6 +651,7 @@ $('flip-art').addEventListener('change', (event) => { state.flipArt = event.targ
 $('icon-label').addEventListener('change', (event) => { state.iconLabel = event.target.checked; renderPreview(); save(); });
 $('reset-look').addEventListener('click', () => setLook('natural'));
 document.querySelectorAll('.preview-tabs button').forEach((button) => button.addEventListener('click', () => selectOutput(button.dataset.output)));
+$('load-sample').addEventListener('click', toggleSample);
 $('upload-button').addEventListener('click', () => $('art-upload').click());
 $('art-upload').addEventListener('change', (event) => { loadArt(event.target.files[0]); event.target.value = ''; });
 $('copy-image-prompt').addEventListener('click', () => copyText(imagePrompt(form()), 'Image prompt copied'));
@@ -618,7 +672,7 @@ document.addEventListener('paste', (event) => {
   if (!image) return;
   event.preventDefault(); loadArt(image);
 });
-$('remove-art').addEventListener('click', () => { state.art = null; state.artInfo = null; state.framing = defaultFraming(); syncFramingControls(); $('art-upload').value = ''; $('upload-title').textContent = 'Add your artwork'; $('upload-subtitle').textContent = 'PNG, JPG or WebP · kept on this device'; $('remove-art').hidden = true; $('art-framing').hidden = true; $('art-style').hidden = true; render(); save(); });
+$('remove-art').addEventListener('click', () => { state.art = null; state.artInfo = null; state.framing = defaultFraming(); syncFramingControls(); $('art-upload').value = ''; syncArtworkUI('Add your artwork', 'PNG, JPG or WebP · kept on this device'); render(); save(); });
 $('art-zoom').addEventListener('input', (event) => { state.framing[state.output].zoom = Number(event.target.value) / 100; $('zoom-value').textContent = `${event.target.value}%`; renderPreview(); save(); });
 $('reset-framing').addEventListener('click', () => { state.framing[state.output] = { zoom: 1, x: 0, y: 0 }; syncFramingControls(); renderPreview(); save(); });
 const previewCanvas = $('preview'); let drag = null;

@@ -12,12 +12,12 @@ The broader ambition is to build a product people actually use and share, then c
 
 ## What exists today
 
-- A responsive studio with coin name, ticker, one-line idea, description, optional links, live previews, and a sticky edit/preview arrangement on small screens.
+- A responsive studio with coin name, ticker, one-line idea, description, optional links, live previews, and a sticky edit/preview arrangement on small screens. A temporary sample demonstrates the kit and restores the previous draft when cleared.
 - Exports for a 1200 × 1200 PNG coin image, 1500 × 500 JPEG Pump banner, 1200 × 675 PNG X card, 1080 × 1920 PNG story, and a ZIP launch kit with copy and checklist.
-- Local PNG/JPG/WebP artwork upload, drop, and paste; independent crop, zoom, and image adjustments; a clean coin-image option; a two-color Bold letter generator; and a 72 px avatar check.
+- Local PNG/JPG/WebP artwork upload, drop, and paste; independent crop, zoom, and image adjustments; a clean coin-image option; a two-color Bold letter generator; and a 72 px avatar check. The editor warns that uploaded art disappears on reload and that long ideas are shortened in some exports.
 - A Higgsfield affiliate link and a copyable image prompt. Generating there is a separate visit; the creator downloads the result and imports it into MintFrame. There is no Higgsfield API or account integration.
-- A preflight checklist, plus a mobile Pump handoff that copies fields and downloads images. Pump's form is **not** filled automatically: the creator selects the files and pastes fields in Pump.
-- After launch, a creator can enter a full Solana mint or Pump coin URL, copy the exact address, make an address card and shareable link, optionally load indexed token labels, and scan possible same-name matches through DEX Screener. These checks do not establish ownership or safety.
+- A preflight checklist and optional same-name search before launch, plus a mobile Pump handoff that copies fields and shares or downloads images. Pump's form is **not** filled automatically: the creator selects the files and pastes fields in Pump.
+- After launch, a creator can enter a full Solana mint or Pump coin URL, copy the exact address, make an address card and shareable link, and optionally load indexed token labels. Indexed search and labels do not establish ownership, name availability, or safety.
 - A generated MintFrame project coin image at [`assets/mintframe-coin.png`](assets/mintframe-coin.png). The website's social preview is [`og.png`](og.png); they serve different purposes.
 
 ## Codebase guide
