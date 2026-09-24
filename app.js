@@ -256,6 +256,7 @@ const outputDescriptions = {
 const avatarSourceCanvas = document.createElement('canvas');
 function renderPreview() {
   drawAsset($('preview'), state.output);
+  drawMobilePreview();
   const avatarSource = state.output === 'icon' ? $('preview') : avatarSourceCanvas;
   if (state.output !== 'icon') drawAsset(avatarSourceCanvas, 'icon');
   const avatar = $('avatar-preview').getContext('2d'); avatar.clearRect(0, 0, 72, 72); avatar.drawImage(avatarSource, 0, 0, 72, 72);
@@ -451,7 +452,7 @@ fields.forEach((id) => $(id).addEventListener('input', () => {
     $('import-status').className = 'import-status';
     $('import-token').textContent = '↘ Load indexed name and ticker';
   }
-  save(); render(); if (['coin-name', 'ticker', 'mint-address'].includes(id)) { state.scanSerial++; $('scan-names').disabled = false; $('scan-names').textContent = 'Search possible matches ↗'; $('collision-results').replaceChildren(); }
+  save(); render(); updateOptionalCount(); if (['coin-name', 'ticker', 'mint-address'].includes(id)) { state.scanSerial++; $('scan-names').disabled = false; $('scan-names').textContent = 'Search possible matches ↗'; $('collision-results').replaceChildren(); }
 }));
 document.querySelectorAll('.theme').forEach((button) => button.addEventListener('click', () => setTheme(button.dataset.theme)));
 document.querySelectorAll('.look').forEach((button) => button.addEventListener('click', () => setLook(button.dataset.look)));
@@ -525,6 +526,38 @@ $('copy-share-link').addEventListener('click', async () => { const mint = mintFr
 $('import-token').addEventListener('click', importToken);
 $('back-to-draft').addEventListener('click', () => { state.importSerial++; state.scanSerial++; state.shareMode = false; fields.forEach((id) => { $(id).value = ''; }); $('shared-banner').hidden = true; $('import-status').textContent = 'Optional: load public token labels from DEX Screener after launch.'; $('import-status').className = 'import-status'; $('import-token').textContent = '↘ Load indexed name and ticker'; history.replaceState(null, '', `${location.pathname}#studio`); restore(); render(); $('studio').scrollIntoView({ behavior: 'smooth' }); });
 $('scan-names').addEventListener('click', scanNames);
+
+const mobileViewport = matchMedia('(max-width: 600px)');
+function updateOptionalCount() {
+  const count = ['website', 'social', 'telegram'].filter((id) => $(id).value.trim()).length;
+  $('optional-count').textContent = count ? `${count} added` : 'Optional';
+}
+function drawMobilePreview() {
+  const source = $('preview'), thumb = $('mobile-preview-thumb'), ctx = thumb.getContext('2d');
+  const scale = Math.min(thumb.width / source.width, thumb.height / source.height);
+  const width = source.width * scale, height = source.height * scale;
+  ctx.fillStyle = '#0d151b'; ctx.fillRect(0, 0, thumb.width, thumb.height);
+  ctx.drawImage(source, (thumb.width - width) / 2, (thumb.height - height) / 2, width, height);
+  $('mobile-preview-label').textContent = { icon: 'Coin image', banner: 'Pump banner', social: 'X card', story: 'Story' }[state.output];
+}
+function updateMobileDock() {
+  const controls = document.querySelector('.controls').getBoundingClientRect();
+  const preview = $('live-preview').getBoundingClientRect();
+  const editing = document.activeElement?.matches('input, textarea');
+  $('mobile-preview-dock').hidden = !mobileViewport.matches || editing || controls.top > innerHeight - 120 || controls.bottom < 120 || preview.top < innerHeight - 120;
+}
+$('toggle-links').addEventListener('click', () => {
+  const open = $('toggle-links').getAttribute('aria-expanded') !== 'true';
+  $('toggle-links').setAttribute('aria-expanded', String(open));
+  $('optional-links').classList.toggle('open', open);
+  updateMobileDock();
+});
+$('mobile-preview-jump').addEventListener('click', () => $('live-preview').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
+addEventListener('scroll', updateMobileDock, { passive: true });
+addEventListener('resize', updateMobileDock);
+document.addEventListener('focusin', updateMobileDock);
+document.addEventListener('focusout', () => requestAnimationFrame(updateMobileDock));
+updateOptionalCount(); updateMobileDock();
 
 const heroArt = document.querySelector('.hero-art');
 $('hero-shuffle').addEventListener('click', () => {
